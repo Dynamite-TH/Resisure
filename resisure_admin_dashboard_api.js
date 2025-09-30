@@ -181,7 +181,7 @@ const getAdminRequest = (workspace = "", dashboard = "") => {
 };
 
 //Post a JSON message to a queue
-const postQueue = (table, msgJSON) =>{
+const postQueue = (table, msgJSON) => {
   return new Promise((resolve) => {
     //put message on data insert queue
     (async () => {
@@ -201,12 +201,13 @@ const postQueue = (table, msgJSON) =>{
         const date = new Date();
         let jsonData = {};
         if (table === "customers") {
-        jsonData = {
-          "type": "manual",
-          "table": table,
-          "datetime": date,
-          "customers": msgJSON
-        }}
+          jsonData = {
+            "type": "manual",
+            "table": table,
+            "datetime": date,
+            "customers": msgJSON
+          }
+        }
         else if (table === "properties") {
           jsonData = {
             "type": "manual",
@@ -214,13 +215,14 @@ const postQueue = (table, msgJSON) =>{
             "datetime": date,
             "properties": msgJSON
           }
-        }else if (table === "Areas") {
+        } else if (table === "Areas") {
           jsonData = {
             "type": "manual",
             "table": table,
             "datetime": date,
             "areas": msgJSON
-        }}
+          }
+        }
         console.log("Message to Queue: " + JSON.stringify(jsonData));
         //Queue Message
         let queueMsg = JSON.stringify(jsonData);;
@@ -265,7 +267,7 @@ const processCustomers = () => {
           //check we have records to process
           if (custData.rows.length > 0) {
             //work out which column is which
-            let cCustRef, cCustName, cContName, cCustEmail, cSumReport, cPropReport, cCustAction,cCustID, cStatus, cCustomer;
+            let cCustRef, cCustName, cContName, cCustEmail, cSumReport, cPropReport, cCustAction, cCustID, cStatus, cCustomer;
             for (let c = 0; c < custData.column_order.length; c++) {
               switch (custData.column_order[c].toString().toLowerCase()) {
                 case "customer reference":
@@ -304,7 +306,7 @@ const processCustomers = () => {
             }
             //process each record
             let messages = [];
-            let cID, cRef, cName, cCName, cEmail, cSReports, cPReports, cAction, date, cStat, cCust;
+            let cID, cRef, cName, cCName, cEmail, cSReports, cPReports, cAction, cStat, cCust;
 
             for (let r = 0; r < custData.rows.length; r++) {
 
@@ -323,7 +325,7 @@ const processCustomers = () => {
               //if we do not have a customer ID then we need to create a new customer
 
               let msgJSON = {
-                "customer" : cCust,
+                "customer": cCust,
                 "action": cAction,
                 "customer_id": cID,
                 "customer_ref": cRef,
@@ -356,8 +358,8 @@ const processCustomers = () => {
                   msgJSON.action = "deactivate";
                   messages.push(msgJSON);
                   console.log("Customer Deactivated: " + cID);
-                
-                }else if (cAction == 4 && cID > 0) {
+
+                } else if (cAction == 4 && cID > 0) {
                   //post the message to the queue
                   msgJSON.action = "reactivate";
                   messages.push(msgJSON);
@@ -366,11 +368,95 @@ const processCustomers = () => {
 
                 } else {
                   console.log("No Customer Admin Requests to Process");
+                  try {
+                  const dbSync = await pool.query('SELECT * FROM customers WHERE customer_id=$1', [cID]);
+                  const dbCustName = dbSync.rows[0].customer_name;
+                  const dbCustRef = dbSync.rows[0].customer_ref;
+                  const dbCustContact = dbSync.rows[0].customer_contact;
+                  const dbCustEmail = dbSync.rows[0].customer_email;
+                  const dbSummaryReports = dbSync.rows[0].summary_report;
+                  const dbPropertyReports = dbSync.rows[0].property_report;
+                  const dbStatus = dbSync.rows[0].status;
+                  console.log(dbCustName, dbCustRef, dbCustContact, dbCustEmail, dbSummaryReports, dbPropertyReports, dbStatus + " DB Customer Data");
+
+                  //check for mismatches
+
+                  if (dbSync){
+                    let dataMismatch = [];
+                    if (dbCustName != cName) {
+                      console.log("Customer Name Mismatch for ID " + cID + " Dashboard: " + cName + " DB: " + dbCustName);
+                      msgJSON.customer_name = dbCustName;
+                      msgJSON.action = "dbToZohoUpdate";
+                      dataMismatch.push("Customer Name");
+                    }
+                    if (dbCustRef != cRef) {
+                      console.log("Customer Ref Mismatch for ID " + cID + " Dashboard: " + cRef + " DB: " + dbCustRef);
+                      msgJSON.customer_ref = dbCustRef;
+                      msgJSON.action = "dbToZohoUpdate";
+                      dataMismatch.push("Customer Ref");
+                      
+                    }
+                    if (dbCustContact != cCName) {
+                      console.log("Customer Contact Mismatch for ID " + cID + " Dashboard: " + cCName + " DB: " + dbCustContact);
+                      msgJSON.customer_contact = dbCustContact;
+                      msgJSON.action = "dbToZohoUpdate"; 
+                      dataMismatch.push("Customer Contact");
+                    }
+                    if (dbCustEmail != cEmail) {
+                      console.log("Customer Email Mismatch for ID " + cID + " Dashboard: " + cEmail + " DB: " + dbCustEmail);
+                      msgJSON.email = dbCustEmail;
+                      msgJSON.action = "dbToZohoUpdate";
+                      dataMismatch.push("Customer Email");
+                      
+                    }
+                    if (dbSummaryReports != cSReports) {
+                      console.log("Customer Summary Reports Mismatch for ID " + cID + " Dashboard: " + cSReports + " DB: " + dbSummaryReports);
+                      msgJSON.summary_reports = dbSummaryReports;
+                      msgJSON.action = "dbToZohoUpdate";
+                      dataMismatch.push("Summary Reports");
+                      
+                    }
+                    if (dbPropertyReports != cPReports) {
+                      console.log("Customer Property Reports Mismatch for ID " + cID + " Dashboard: " + cPReports + " DB: " + dbPropertyReports);
+                      msgJSON.property_reports = dbPropertyReports;
+                      msgJSON.action = "dbToZohoUpdate";
+                      dataMismatch.push("Property Reports");
+                      
+                    }
+                    if (dbStatus != cStat) {
+                      console.log("Customer Status Mismatch for ID " + cID + " Dashboard: " + cStat + " DB: " + dbStatus);
+                      msgJSON.status = dbStatus;
+                      msgJSON.action = "dbToZohoUpdate";
+                      dataMismatch.push("Status");
+                    }
+                    if (msgJSON.action == "dbToZohoUpdate") {
+                      msgJSON.error = "Data Discrepency, data overwritten for the following fields: " + dataMismatch.join(", ");
+                      messages.push(msgJSON);
+                    }
+                    else{
+                      console.log("No Data Mismatches for Customer ID: " + cID);
+                    }
+                  //post the message to the queue
+                  
+                } else {
+                  throw new Error("No Customer found in DB for ID: " + cID);
+                }
+                } catch (err) {
+                  console.log("Failed to sync customer data: " + err.message);
+                  const errJSON = {
+                    "process": "processCustomers",
+                    "error": "Failed to sync customer data: " + err.message,
+                    "data": msgJSON
+                  }
+                  const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
+                  console.log(errJSON.error);
                 }
 
 
 
-              } catch (err) {
+
+              }
+            } catch (err) {
                 //log error
                 const errJSON = {
                   "process": "processCustomers",
@@ -380,7 +466,7 @@ const processCustomers = () => {
                 const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
                 console.log(errJSON.error);
               }
-            }
+            
             if (messages.length > 0) {
               //console.log("Messages to Queue: " + JSON.stringify(messages));
               const table = "customers";
@@ -397,7 +483,7 @@ const processCustomers = () => {
             } else {
               //No messages to queue
             }
-          } else {
+          }} else {
             //Failed to get report requests
             //Error logged in getReports
             retJSON.result = false;
@@ -435,7 +521,7 @@ const processProperties = () => {
           //check we have records to process
           if (PropData.rows.length > 0) {
             //work out which column is which
-            let pPropID, pCustID, pPropCode, pStatus, pAreaID, pMouldSensitivity, pMouldIndex, pMouldDecline, pPropertyAction, pProperty;
+            let pPropID, pCustID, pPropCode, pStatus, pAreaID, pPropertyAction, pProperty;
             for (let c = 0; c < PropData.column_order.length; c++) {
               switch (PropData.column_order[c].toString().toLowerCase()) {
                 case "property id":
@@ -453,15 +539,6 @@ const processProperties = () => {
                 case "area_id":
                   pAreaID = c;
                   break;
-                case "mould sensitivity":
-                  pMouldSensitivity = c;
-                  break;
-                case "mould index":
-                  pMouldIndex = c;
-                  break;
-                case "mould decline":
-                  pMouldDecline = c;
-                  break;
                 case "action":
                   pPropertyAction = c;
                   break;
@@ -474,7 +551,7 @@ const processProperties = () => {
             }
             //process each record
             let messages = [];
-            let pID, pCID, pCode, pStat, pAreID, pMSensitivity, pMIndex, pMDecline, pAction, pProp;
+            let pID, pCID, pCode, pStat, pAreID, pAction, pProp;
 
             for (let r = 0; r < PropData.rows.length; r++) {
 
@@ -483,12 +560,9 @@ const processProperties = () => {
               pCode = PropData.rows[r][pPropCode];
               pStat = parseInt(PropData.rows[r][pStatus]);
               pAreID = parseInt(PropData.rows[r][pAreaID]);
-              pMSensitivity = (pMouldSensitivity != null) ? parseInt(PropData.rows[r][pMouldSensitivity]) : 0;
-              pMIndex = (pMouldIndex != null) ? parseInt(PropData.rows[r][pMouldIndex]) : 0;
-              pMDecline = (pMouldDecline != null) ? parseInt(PropData.rows[r][pMouldDecline]) : 0;
               pAction = parseInt(PropData.rows[r][pPropertyAction]);
               pProp = parseInt(PropData.rows[r][pProperty]);
-              console.log(pProp, pID, pCID, pCode, pStat, pAreID, pMSensitivity, pMIndex, pMDecline, pAction + " Property Data");
+              console.log(pProp, pID, pCID, pCode, pStat, pAreID, pAction + " Property Data");
               //check if we have a customer ID
 
               let msgJSON = {
@@ -499,9 +573,6 @@ const processProperties = () => {
                 "property_code": pCode,
                 "status": pStat,
                 "area_id": pAreID,
-                "mould_sensitivity": pMSensitivity,
-                "mould_index": pMIndex,
-                "mould_decline": pMDecline,
               }
 
               //check the action
@@ -535,14 +606,69 @@ const processProperties = () => {
                     //post the message to the queue
                     msgJSON.action = "reactivate";
                     messages.push(msgJSON);
-                  
-                  
-                  } else {
-                    console.log("No Property Admin Requests to Process");
                   }
-                } else {
+                } else if (!pCID) {
                   console.log("Customer ID not found for Property: " + pID);
                   throw new Error("Customer ID not found for Property: ");
+                
+
+
+                } else {  
+                  console.log("No Property Admin Requests to Process");
+                  try {
+                    const dbSync = await pool.query('SELECT * FROM properties WHERE property_id=$1', [pID]);
+                    const dbPropCode = dbSync.rows[0].property_code;
+                    const dbCustID = dbSync.rows[0].customer_id;
+                    const dbAreaID = dbSync.rows[0].area_id;
+                    const dbStatus = dbSync.rows[0].status;
+                    console.log(dbPropCode, dbCustID, dbAreaID, dbStatus + " DB Property Data");
+                    //check for mismatches
+                    if (dbSync) {
+                      let dataMismatch = ""
+                      if (dbPropCode != pCode) {
+                        console.log("Property Code Mismatch for ID " + pID + " Dashboard: " + pCode + " DB: " + dbPropCode);
+                        msgJSON.property_code = dbPropCode;
+                        msgJSON.action = "dbToZohoUpdate";
+                        dataMismatch = dataMismatch + " Property Code, ";
+                      }
+                      if (dbCustID != pCID) {
+                        console.log("Customer ID Mismatch for Property ID " + pID + " Dashboard: " + pCID + " DB: " + dbCustID);
+                        msgJSON.customer_id = dbCustID;
+                        msgJSON.action = "dbToZohoUpdate";
+                        dataMismatch = dataMismatch + " Customer ID, ";
+                      }
+                      if (dbAreaID != pAreID) {
+                        console.log("Area ID Mismatch for Property ID " + pID + " Dashboard: " + pAreID + " DB: " + dbAreaID);
+                        msgJSON.area_id = dbAreaID;
+                        msgJSON.action = "dbToZohoUpdate";
+                        dataMismatch = dataMismatch + " Area ID, ";
+                      }
+                      if (dbStatus != pStat) {
+                        console.log("Property Status Mismatch for ID " + pID + " Dashboard: " + pStat + " DB: " + dbStatus);
+                        msgJSON.status = dbStatus;
+                        msgJSON.action = "dbToZohoUpdate";
+                        dataMismatch = dataMismatch + " Status, ";
+                      }
+                      if (msgJSON.action == "dbToZohoUpdate") {
+                        msgJSON.error = "Data Discrepency, data overwritten for the following fields: " + dataMismatch.slice(0, -2);
+                        messages.push(msgJSON);
+                      }
+                        //post the message to the queue
+
+                      } else {
+                        //no property found
+                        console.log("No Property found in DB for ID: " + pID);
+                      }
+                    } catch (err) {
+                      console.log("Failed to sync property data: " + err.message);
+                      const errJSON = {
+                        "process": "processProperties",
+                        "error": "Failed to sync property data: " + err.message,
+                        "data": msgJSON
+                      }
+                      const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
+                      console.log(errJSON.error);
+                  }
                 }
 
 
@@ -596,7 +722,7 @@ const processProperties = () => {
 };
 
 const processAreas = () => {
-    return new Promise((resolve) => {
+  return new Promise((resolve) => {
     (async () => {
       //set return JSON
       let retJSON = { "result": false };
@@ -664,23 +790,23 @@ const processAreas = () => {
               //1 = new, 2 = amend, 3 = deactivate
               try {
                 if (!aID && aAction === 1) {
-                    //we do not have a property ID so we can create a new property
-                    console.log("Creating New Area: " + aCode);
-                    //post the message to the queue
-                    msgJSON.action = "new";
-                    messages.push(msgJSON);
+                  //we do not have a property ID so we can create a new property
+                  console.log("Creating New Area: " + aCode);
+                  //post the message to the queue
+                  msgJSON.action = "new";
+                  messages.push(msgJSON);
 
                 } else if (aAction == 2 && aID > 0) {
-                    //we have a property ID so we can update the property
-                    msgJSON.date_updated = new Date();
-                    console.log("Updating Area: " + aID);
-                    //post the message to the queue
-                    msgJSON.action = "amend";
-                    messages.push(msgJSON);
-                  
-                  
+                  //we have a property ID so we can update the property
+                  msgJSON.date_updated = new Date();
+                  console.log("Updating Area: " + aID);
+                  //post the message to the queue
+                  msgJSON.action = "amend";
+                  messages.push(msgJSON);
+
+
                 } else {
-                    console.log("No Area Admin Requests to Process");
+                  console.log("No Area Admin Requests to Process");
                 }
 
 
