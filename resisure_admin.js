@@ -224,8 +224,8 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
 
                     const res = await pool.query('INSERT INTO customers (customer_ref, customer_name, customer_email, date_added, customer_contact, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING customer_id', [customer.customer_ref, customer.customer_name, customer.email, dateAdded, customer.customer_contact, 1]);
                     console.log("Customer Inserted: " + res.rows[0].customer_id)
-                    //const sRep = await pool.query('INSERT INTO customer_reports (customer_id, report_id, report_structure_id, report_output) VALUES ($1, $2, $3, $4) RETURNING customer_reports_id', [res.rows[0].customer_id, 2, customer.summary_reports, 1]);
-                    //const pRep = await pool.query('INSERT INTO customer_reports (customer_id, report_id, report_structure_id, report_output) VALUES ($1, $2, $3, $4) RETURNING customer_reports_id', [res.rows[0].customer_id, 1, customer.property_reports, 1]);
+                    const sRep = await pool.query('INSERT INTO customer_reports (customer_id, report_structure_property_id, report_output, status, summary_report) VALUES ($1, $2, $3, $4, $5) RETURNING customer_reports_id', [res.rows[0].customer_id, customer.property_reports, 1, 1 , customer.summary_reports]);
+                    
                     
                     statusMsg.status = 1; 
                     statusMsg.date_added = customer.datetime;
@@ -244,10 +244,10 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
 
                     let dateUpdated = new Date()
 
-                    const res = await pool.query('UPDATE customers set customer_ref = $1, customer_name = $2, customer_email = $3, date_updated = $5, customer_contact = $6, status = $7, summary_report = $8, property_report = $9 WHERE customer_id = $4 RETURNING customer_id', [customer.customer_ref, customer.customer_name, customer.email, customer.customer_id, dateUpdated, customer.customer_contact, 1, customer.summary_reports, customer.property_reports])
+                    const res = await pool.query('UPDATE customers set customer_ref = $1, customer_name = $2, customer_email = $3, date_updated = $5, customer_contact = $6, status = $7 WHERE customer_id = $4 RETURNING customer_id', [customer.customer_ref, customer.customer_name, customer.email, customer.customer_id, dateUpdated, customer.customer_contact, 1])
                     console.log("Customer Updated: " + res.rows[0].customer_id)
-                    const sRep = await pool.query('UPDATE customer_reports set report_structure_id = $2 WHERE customer_id = $1 AND report_id = 2 RETURNING customer_reports_id', [customer.customer_id, customer.summary_reports]);
-                    const pRep = await pool.query('UPDATE customer_reports set report_structure_id = $2 WHERE customer_id = $1 AND report_id = 1 RETURNING customer_reports_id', [customer.customer_id, customer.property_reports]);
+                    const sRep = await pool.query('UPDATE customer_reports set report_structure_property_id = $2, summary_report = $3 WHERE customer_id = $1 RETURNING customer_reports_id', [customer.customer_id, customer.property_report ,customer.summary_reports]);
+                    
 
                     statusMsg.status = 1; //set status to 1 for amended customers
                     statusMsg.date_updated = customer.datetime;
@@ -264,9 +264,8 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
                   } else if (customer.action === "deactivate") {
                     console.log("Deactivating Customer: " + customer.customer_id);
                     //deactivate the customer in the database
-                    const res = await pool.query('UPDATE customers set status = 0 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]
-                    );
-
+                    const res = await pool.query('UPDATE customers set status = 0 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]);
+                    const rep = await pool.query('UPDATE customer_reports set status = 0 WHERE customer_id = $1', [customer.customer_id]);
                     console.log("Customer Deactivated: " + res.rows[0].customer_id)
                     //set the status message
                     statusMsg.customer_id = res.rows[0].customer_id;
@@ -276,8 +275,8 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
                   } else if (customer.action === "reactivate") {
                     console.log("Reactivating Customer: " + customer.customer_id);
                     //reactivate the customer in the database
-                    const res = await pool.query('UPDATE customers set status = 1 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]
-                    );
+                    const res = await pool.query('UPDATE customers set status = 1 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]);
+                    const rep = await pool.query('UPDATE customer_reports set status = 1 WHERE customer_id = $1', [customer.customer_id]);
                     console.log("Customer Reactivated: " + res.rows[0].customer_id)
                     //set the status message
                     statusMsg.customer_id = res.rows[0].customer_id;
@@ -334,6 +333,10 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
                   "mould_sensitivity": property.mould_sensitivity,
                   "mould_index": property.mould_index,
                   "mould_decline": property.mould_decline,
+                  "flat_number": property.flat_number,
+                  "street_number": property.street_number,
+                  "street_name": property.street_name,
+                  "town_name": property.town_name,
                   }
                 if (property.action === "new") {
                     console.log("Adding property: " + property.property_code);
@@ -343,7 +346,8 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
 
                     const res = await pool.query('INSERT INTO properties (customer_id, property_code, date_added, area_id, status, mould_sensitivity, mould_index, mould_decline_coefficient) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING property_id', [property.customer_id, property.property_code, dateAdded, property.area_id, 1, property.mould_sensitivity, property.mould_index, property.mould_decline]);
                     console.log("property Inserted: " + res.rows[0].property_id)
-
+                    const InfoRes = await pool.query ('INSERT INTO property_info (flat_number, street_number, street_name, town_name, property_id, postcode) VALUES ($1, $2, $3, $4, $5) RETURNING property_info_id', [property.flat_number, property.street_number, property.street_name, property.town_name, res.rows[0].property_id, property.postcode]);
+                    console.log("Property Info Inserted: " + InfoRes.rows[0].property_info_id)
                     //set the status message
                     statusMsg.property_id = res.rows[0].property_id;
                     statusMsg.status = 1; //default status is 1 for new properties
@@ -360,6 +364,7 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
                     let dateUpdated = new Date()
                     const res = await pool.query('UPDATE properties set customer_id = $2, property_code = $3, area_id = $4, date_updated = $5, status = $6, mould_sensitivity = $7, mould_index = $8, mould_decline_coefficient = $9 WHERE property_id = $1 RETURNING property_id', [property.property_id, property.customer_id, property.property_code, property.area_id, dateUpdated, property.status, property.mould_sensitivity, property.mould_index, property.mould_decline])
                     console.log("Property Updated: " + res.rows[0].property_id)
+                    const InfoRes = await pool.query ('UPDATE property_info set flat_number = $2, street_number = $3, street_name = $4, town_name = $5 WHERE property_id = $1 RETURNING property_info_id', [property.property_id, property.flat_number, property.street_number, property.street_name, property.town_name]);
 
                     //set the status message
                     statusMsg.date_updated = dateUpdated;
