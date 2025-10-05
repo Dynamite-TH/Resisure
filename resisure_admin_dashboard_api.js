@@ -267,7 +267,7 @@ const processCustomers = () => {
           //check we have records to process
           if (custData.rows.length > 0) {
             //work out which column is which
-            let cCustRef, cCustName, cContName, cCustEmail, cSumReport, cPropReport, cCustAction, cCustID, cStatus, cCustomer;
+            let cCustRef, cCustName, cContName, cCustEmail, cSumReport, cPropReport, cCustAction, cCustID, cStatus, cCustomer, cReportOutput;
             for (let c = 0; c < custData.column_order.length; c++) {
               switch (custData.column_order[c].toString().toLowerCase()) {
                 case "customer reference":
@@ -300,13 +300,15 @@ const processCustomers = () => {
                 case "customer":
                   cCustomer = c;
                   break;
+                case "report_output":
+                  cReportOutput = c;
                 default:
                   break;
               }
             }
             //process each record
             let messages = [];
-            let cID, cRef, cName, cCName, cEmail, cSReports, cPReports, cAction, cStat, cCust;
+            let cID, cRef, cName, cCName, cEmail, cSReports, cPReports, cAction, cStat, cCust, cRepOutput;
 
             for (let r = 0; r < custData.rows.length; r++) {
 
@@ -320,6 +322,7 @@ const processCustomers = () => {
               cStat = parseInt(custData.rows[r][cStatus]);
               cAction = parseInt(custData.rows[r][cCustAction]);
               cCust = parseInt(custData.rows[r][cCustomer]);
+              cRepOutput = parseInt(custData.rows[r][cReportOutput]);
               console.log(cID, cRef, cName, cCName, cEmail, cAction, cSReports, cPReports + " Customer Data");
               //check if we have a customer ID
               //if we do not have a customer ID then we need to create a new customer
@@ -335,6 +338,7 @@ const processCustomers = () => {
                 "summary_reports": cSReports,
                 "property_reports": cPReports,
                 "status": cStat,
+                "report_output": cRepOutput
               }
 
               //check the action
@@ -370,12 +374,14 @@ const processCustomers = () => {
                   console.log("No Customer Admin Requests to Process");
                   try {
                   const dbSync = await pool.query('SELECT * FROM customers WHERE customer_id=$1', [cID]);
+                  const dbCustReport = await pool.query('SELECT * FROM customer_reports WHERE customer_id=$1', [cID]);
+                  const dbPropertyReports = dbCustReport.rows[0].report_structure_property_id;
+                  const dbSummaryReports = dbCustReport.rows[0].summary_report;
+                  const dbReportOutput = dbCustReport.rows[0].report_output;
                   const dbCustName = dbSync.rows[0].customer_name;
                   const dbCustRef = dbSync.rows[0].customer_ref;
                   const dbCustContact = dbSync.rows[0].customer_contact;
                   const dbCustEmail = dbSync.rows[0].customer_email;
-                  const dbSummaryReports = dbSync.rows[0].summary_report;
-                  const dbPropertyReports = dbSync.rows[0].property_report;
                   const dbStatus = dbSync.rows[0].status;
                   console.log(dbCustName, dbCustRef, dbCustContact, dbCustEmail, dbSummaryReports, dbPropertyReports, dbStatus + " DB Customer Data");
 
@@ -428,6 +434,12 @@ const processCustomers = () => {
                       msgJSON.status = dbStatus;
                       msgJSON.action = "dbToZohoUpdate";
                       dataMismatch.push("Status");
+                    }
+                    if (dbReportOutput != cRepOutput) {
+                      console.log("Customer Report Output Mismatch for ID " + cID + " Dashboard: " + cRepOutput + " DB: " + dbReportOutput);
+                      msgJSON.report_output = dbReportOutput;
+                      msgJSON.action = "dbToZohoUpdate";
+                      dataMismatch.push("Report Output");
                     }
                     if (msgJSON.action == "dbToZohoUpdate") {
                       msgJSON.error = "Data Discrepency, data overwritten for the following fields: " + dataMismatch.join(", ");
@@ -521,7 +533,7 @@ const processProperties = () => {
           //check we have records to process
           if (PropData.rows.length > 0) {
             //work out which column is which
-            let pPropID, pCustID, pPropCode, pStatus, pAreaID, pPropertyAction, pProperty;
+            let pPropID, pCustID, pPropCode, pStatus, pAreaID, pPropertyAction, pProperty, pTown, pStreet, pStreetNum, pFlatNum;
             for (let c = 0; c < PropData.column_order.length; c++) {
               switch (PropData.column_order[c].toString().toLowerCase()) {
                 case "property id":
@@ -545,13 +557,26 @@ const processProperties = () => {
                 case "property":
                   pProperty = c;
                   break;
+                case "town":
+                  pTown = c;
+                  break;
+                case "street":
+                  pStreet = c;
+                  break;
+                case "street number":
+                  pStreetNum = c;
+                  break;
+                case "flat number":
+                  pFlatNum = c;
+                  break;
+                case "county":
                 default:
                   break;
               }
             }
             //process each record
             let messages = [];
-            let pID, pCID, pCode, pStat, pAreID, pAction, pProp;
+            let pID, pCID, pCode, pStat, pAreID, pAction, pProp, pTownName, pStreetName, pStreetNumVal, pFlatNumVal;
 
             for (let r = 0; r < PropData.rows.length; r++) {
 
@@ -562,6 +587,11 @@ const processProperties = () => {
               pAreID = parseInt(PropData.rows[r][pAreaID]);
               pAction = parseInt(PropData.rows[r][pPropertyAction]);
               pProp = parseInt(PropData.rows[r][pProperty]);
+              pTownName = PropData.rows[r][pTown];
+              pStreetName = PropData.rows[r][pStreet];
+              pStreetNumVal = PropData.rows[r][pStreetNum];
+              pFlatNumVal = PropData.rows[r][pFlatNum];
+
               console.log(pProp, pID, pCID, pCode, pStat, pAreID, pAction + " Property Data");
               //check if we have a customer ID
 
@@ -573,6 +603,10 @@ const processProperties = () => {
                 "property_code": pCode,
                 "status": pStat,
                 "area_id": pAreID,
+                "town": pTownName,
+                "street": pStreetName,
+                "street_number": pStreetNumVal,
+                "flat_number": pFlatNumVal
               }
 
               //check the action
