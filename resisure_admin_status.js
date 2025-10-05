@@ -205,7 +205,54 @@ const updateCustomerZoho = async (workspace = "", customer = 0, data = {}, dashb
     "Error message": error,
     "ZOHO_CRITERIA" : "(customer=" + customer + ")" 
   });
-  } 
+  } else if (data.action == "dbToZohoUpdate") {
+    if (data.date_updated) {
+      formattedDateUpdated = FormattedDate(new Date(data.date_updated));
+    }
+    if (data.error) {
+      error = data.error.replace(/"/g, '');
+    }
+    if (data.summary_reports === 1) {
+      data.summary_reports = "NONE";
+    } else if (data.summary_reports === 2) {
+      data.summary_reports = "DEFAULT";
+    }
+    if (data.property_reports === 1) {
+      data.property_reports = "NONE";
+    } else if (data.property_reports === 2) {
+      data.property_reports = "DEFAULT_NO_IAQ";
+    } else if (data.property_reports === 3) {
+      data.property_reports = "DEFAULT_IAQ";
+    }
+    if (data.report_output === 0) {
+      data.report_output = "Do Not Produce Reports";
+    } else if (data.report_output === 1) {
+      data.report_output = "Produce and Email All Property Reports";
+    } else if (data.report_output === 2) {
+      data.report_output = "Produce and Email Only Property Reports with Issues";
+    } else if (data.report_output === 3) {
+      data.report_output = "Produce Reports Only";
+    }
+    post_data = qs.stringify({
+    "ZOHO_ACTION": "UPDATE",  
+    "ZOHO_OUTPUT_FORMAT": "JSON",
+    "ZOHO_ERROR_FORMAT": "JSON",
+    "ZOHO_API_VERSION": "1.0",
+    "authtoken": api_auth,
+    "Customer ID" : data.customer_id, //set customer id
+    "Customer Name" : data.customer_name, //set customer name
+    "Customer Email" : data.email, //set customer email
+    "Customer Reference" : data.customer_ref, //set customer ref
+    "Contact Name" : data.contact_name, //set customer contact
+    "Date_Updated": formattedDateUpdated, //set status
+    "Summary Report" : data.summary_reports, //set summary reports
+    "Property Report" : data.property_reports, //set property reports  
+    "Report Output" : data.report_output, //set report output
+    "Error message": data.error,
+    "Action to execute": "None", // Default to 'None' after changes are made
+    "ZOHO_CRITERIA" : "(customer=" + customer + ")"
+  });
+  }
   console.log(post_data);
 
   let post_options = {
