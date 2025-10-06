@@ -533,7 +533,7 @@ const processProperties = () => {
           //check we have records to process
           if (PropData.rows.length > 0) {
             //work out which column is which
-            let pPropID, pCustID, pPropCode, pStatus, pAreaID, pPropertyAction, pProperty, pTown, pStreet, pStreetNum, pFlatNum;
+            let pPropID, pCustID, pPropCode, pStatus, pAreaID, pPropertyAction, pProperty, pTown, pStreet, pStreetNum, pFlatNum, pCounty, pCity;
             for (let c = 0; c < PropData.column_order.length; c++) {
               switch (PropData.column_order[c].toString().toLowerCase()) {
                 case "property id":
@@ -569,14 +569,19 @@ const processProperties = () => {
                 case "flat number":
                   pFlatNum = c;
                   break;
-                case "county":
+                case "area_county":
+                  pCounty = c;
+                  break;
+                case "city":
+                  pCity = c;
+                  break;
                 default:
                   break;
               }
             }
             //process each record
             let messages = [];
-            let pID, pCID, pCode, pStat, pAreID, pAction, pProp, pTownName, pStreetName, pStreetNumVal, pFlatNumVal;
+            let pID, pCID, pCode, pStat, pAreID, pAction, pProp, pTownName, pStreetName, pStreetNumVal, pFlatNumVal, pCount, pCityName;
 
             for (let r = 0; r < PropData.rows.length; r++) {
 
@@ -591,6 +596,8 @@ const processProperties = () => {
               pStreetName = PropData.rows[r][pStreet];
               pStreetNumVal = PropData.rows[r][pStreetNum];
               pFlatNumVal = PropData.rows[r][pFlatNum];
+              pCount = PropData.rows[r][pCounty];
+              pCityName = PropData.rows[r][pCity];
 
               console.log(pProp, pID, pCID, pCode, pStat, pAreID, pAction + " Property Data");
               //check if we have a customer ID
@@ -606,7 +613,9 @@ const processProperties = () => {
                 "town": pTownName,
                 "street": pStreetName,
                 "street_number": pStreetNumVal,
-                "flat_number": pFlatNumVal
+                "flat_number": pFlatNumVal,
+                "county": pCount,
+                "city": pCityName
               }
 
               //check the action
@@ -754,6 +763,182 @@ const processProperties = () => {
     })();
   });
 };
+
+const processDevices = () => {
+  return new Promise((resolve) => {
+    (async () => {
+      //set return JSON
+      let retJSON = { "result": false };
+      try {
+        //TODO Get Workspace froma CONFIG file
+        const dashboard = "device_admin_view";
+        //Get Report Requests to process
+        let retDev = await getAdminRequest(workspace, dashboard);
+        //check for customer updates
+        if (retDev.status == 200) {
+          const DevData = retDev.data["response"]["result"];
+          //check we have records to process
+          if (DevData.rows.length > 0) {
+            //work out which column is which
+            let dPropID, dDevID, dAction, dDevice;
+            for (let c = 0; c < DevData.column_order.length; c++) {
+              switch (DevData.column_order[c].toString().toLowerCase()) {
+                case "property_id":
+                  dPropID = c;
+                  break;
+                case "device_id":
+                  dDevID = c;
+                  break;
+                case "action_code":
+                  dAction = c;
+                  break;
+                case "device":
+                  dDevice = c;
+                  break;
+                default:
+                  break;
+              }
+            }
+            //process each record
+            let messages = [];
+            let dPropertyID, dDeviceID, dActionType, dDeviceType;
+
+            for (let r = 0; r < DevData.rows.length; r++) {
+
+              dPropertyID = parseInt(DevData.rows[r][dPropID]);
+              dDeviceID = parseInt(DevData.rows[r][dDevID]);
+              dActionType = parseInt(DevData.rows[r][dAction]);
+              dDeviceType = parseInt(DevData.rows[r][dDevice]);
+              console.log(dPropertyID, dDeviceID, dActionType + " Device Data");
+              //check if we have a customer ID
+
+              let msgJSON = {
+                "device": dDeviceType,
+                "action": dActionType,
+                "device_id": dDeviceID,
+                "property_id": dPropertyID
+              }
+
+              //check the action
+              //1 = new, 2 = amend, 3 = deactivate
+              try {
+                if (dPropertyID) {
+                  if (dAction === 1) {
+                    //we do not have a property ID so we can create a new property
+                    console.log("Editing Device: " + dDeviceID);
+                    //post the message to the queue
+                    msgJSON.action = "Edit";
+                    messages.push(msgJSON);
+
+                  } 
+                } else {  
+                  console.log("No Device Admin Requests to Process");
+                  try {
+                  //   const dbSync = await pool.query('SELECT * FROM properties WHERE property_id=$1', [pID]);
+                  //   const dbPropCode = dbSync.rows[0].property_code;
+                  //   const dbCustID = dbSync.rows[0].customer_id;
+                  //   const dbAreaID = dbSync.rows[0].area_id;
+                  //   const dbStatus = dbSync.rows[0].status;
+                  //   console.log(dbPropCode, dbCustID, dbAreaID, dbStatus + " DB Property Data");
+                  //   //check for mismatches
+                  //   if (dbSync) {
+                  //     let dataMismatch = ""
+                  //     if (dbPropCode != pCode) {
+                  //       console.log("Property Code Mismatch for ID " + pID + " Dashboard: " + pCode + " DB: " + dbPropCode);
+                  //       msgJSON.property_code = dbPropCode;
+                  //       msgJSON.action = "dbToZohoUpdate";
+                  //       dataMismatch = dataMismatch + " Property Code, ";
+                  //     }
+                  //     if (dbCustID != pCID) {
+                  //       console.log("Customer ID Mismatch for Property ID " + pID + " Dashboard: " + pCID + " DB: " + dbCustID);
+                  //       msgJSON.customer_id = dbCustID;
+                  //       msgJSON.action = "dbToZohoUpdate";
+                  //       dataMismatch = dataMismatch + " Customer ID, ";
+                  //     }
+                  //     if (dbAreaID != pAreID) {
+                  //       console.log("Area ID Mismatch for Property ID " + pID + " Dashboard: " + pAreID + " DB: " + dbAreaID);
+                  //       msgJSON.area_id = dbAreaID;
+                  //       msgJSON.action = "dbToZohoUpdate";
+                  //       dataMismatch = dataMismatch + " Area ID, ";
+                  //     }
+                  //     if (dbStatus != pStat) {
+                  //       console.log("Property Status Mismatch for ID " + pID + " Dashboard: " + pStat + " DB: " + dbStatus);
+                  //       msgJSON.status = dbStatus;
+                  //       msgJSON.action = "dbToZohoUpdate";
+                  //       dataMismatch = dataMismatch + " Status, ";
+                  //     }
+                  //     if (msgJSON.action == "dbToZohoUpdate") {
+                  //       msgJSON.error = "Data Discrepency, data overwritten for the following fields: " + dataMismatch.slice(0, -2);
+                  //       messages.push(msgJSON);
+                  //     }
+                  //       //post the message to the queue
+
+                  //     } else {
+                  //       //no property found
+                  //       console.log("No Property found in DB for ID: " + pID);
+                  //     }
+                    } catch (err) {
+                      console.log("Failed to sync property data: " + err.message);
+                      const errJSON = {
+                        "process": "processProperties",
+                        "error": "Failed to sync property data: " + err.message,
+                        "data": msgJSON
+                      }
+                      const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
+                      console.log(errJSON.error);
+                  }
+                }
+
+
+
+              } catch (err) {
+                //log error
+                const errJSON = {
+                  "process": "processProperties",
+                  "error": "Failed to process Customer Admin Request: " + err.message,
+                  "data": msgJSON
+                }
+                const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
+                console.log(errJSON.error);
+              }
+            }
+            if (messages.length > 0) {
+              //console.log("Messages to Queue: " + JSON.stringify(messages));
+              const table = "properties";
+              let repdata = await postQueue(table, messages);
+              //console.log(messages);
+              if (repdata.result) {
+                console.log("Messages Posted to Queue");
+                retJSON.result = true;
+              } else {
+                console.log("Failed to post messages to queue");
+                retJSON.result = false;
+              }
+            } else {
+              //No messages to queue
+            }
+          } else {
+            //Failed to get report requests
+            //Error logged in getReports
+            retJSON.result = false;
+          }
+        }
+        resolve(retJSON);
+      } catch (err) {
+        //log error
+        const errJSON = {
+          "process": "processCustomers",
+          "error": "Failed to process Customers: " + err.message,
+          "data": {}
+        }
+        const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
+        console.log(errJSON.error);
+        resolve(retJSON);
+      }
+    })();
+  });
+};
+
 
 const processAreas = () => {
   return new Promise((resolve) => {
@@ -935,21 +1120,29 @@ const connectMessageBroker = async (reconnectDelay = 500) => {
               } else {
 
               }
-              // const areaRep = await processAreas();
-              // if (areaRep.result) {
-              //   console.log("Areas Processed Successfully");
-              // } else {
+              const areaRep = await processAreas();
+              if (areaRep.result) {
+                console.log("Areas Processed Successfully");
+              } else {
 
-              // }
+              }
 
-              // await waitMs(2000); //wait 2 seconds before processing properties to allow for customer and area creation if needed
-              // //process properties admin requests
-              // const propRep = await processProperties();
-              // if (propRep.result) {
-              //   console.log("Properties Processed Successfully");
-              // } else {
+              await waitMs(2000); //wait 2 seconds before processing properties to allow for customer and area creation if needed
+              //process properties admin requests
+              const propRep = await processProperties();
+              if (propRep.result) {
+                console.log("Properties Processed Successfully");
+              } else {
 
-              // }
+              }
+              await waitMs(2000); //wait 2 seconds before processing devices to allow for property creation if needed
+              //process device admin requests
+              const devRep = await processDevices();
+              if (devRep.result) {
+                console.log("Devices Processed Successfully");
+              } else {
+
+              }
 
 
               break;
