@@ -222,6 +222,13 @@ const postQueue = (table, msgJSON) => {
             "datetime": date,
             "areas": msgJSON
           }
+        } else if (table === "devices") {
+          jsonData = {
+            "type": "manual",
+            "table": table,
+            "datetime": date,
+            "devices": msgJSON
+          }
         }
         console.log("Message to Queue: " + JSON.stringify(jsonData));
         //Queue Message
@@ -904,7 +911,7 @@ const processDevices = () => {
             }
             if (messages.length > 0) {
               //console.log("Messages to Queue: " + JSON.stringify(messages));
-              const table = "properties";
+              const table = "devices";
               let repdata = await postQueue(table, messages);
               //console.log(messages);
               if (repdata.result) {
