@@ -289,6 +289,53 @@ const updateCustomerZoho = async (workspace = "", customer = 0, data = {}, dashb
   });
 }
 
+const updateDeviceZoho = async (workspace = "", device = 0, data = {}, dashboard = "") => {
+  console.log("Updating Zoho Device data: " + JSON.stringify(data));
+  let post_data = qs.stringify({
+    "ZOHO_ACTION": "UPDATE",
+    "ZOHO_OUTPUT_FORMAT": "JSON",
+    "ZOHO_ERROR_FORMAT": "JSON",
+    "ZOHO_API_VERSION": "1.0",
+    "authtoken": api_auth,
+    "action": "None", // Default to 'None' after changes are made
+    "ZOHO_CRITERIA" : "(device=" + device + ")" 
+  });
+  console.log(post_data);
+  let post_options = {
+    hostname: 'dashboard.resisure.co.uk',
+    path: "/api/" + api_email + "/" + encodeURIComponent(workspace) + "/" + encodeURIComponent(dashboard), 
+    port: 443,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  };
+  return new Promise((resolve, reject) => {
+    let post_req = https.request(post_options, (post_res) => {
+      try {
+      let chunks = [];
+      post_res.on("data", function (chunk) {
+        chunks.push(chunk);
+      });
+      post_res.on('end', () => {
+        let body = Buffer.concat(chunks);
+        body = unescapeJs(body.toString('utf8'));
+        resolve(JSON.parse(body));
+      });
+    } catch (err) {
+      console.log("Error processing response: " + err.message);
+      reject(err);
+    }
+    });
+    post_req.on('error', (e) => {
+      reject(e);
+    });
+    post_req.write(post_data);
+    post_req.end();
+  });
+}
+
+
 const updatePropertyZoho = async (workspace = "", property = 0, data = {}, dashboard = "") => {
   console.log("Updating Zoho Property data: " + JSON.stringify(data));
   let formattedDateAdded, formattedDateUpdated, error, post_data;
@@ -503,6 +550,11 @@ const getStatus = async (reconnectDelay = 500) => {{
               //currently no area update function
               const status = await updateAreaZoho(workspace, messageJSON[i].area, messageJSON[i], dashboard);
               console.log("Area Dashboard Updated: " + JSON.stringify(status));
+            } else if (messageJSON[i].dashboard === 'devices') {
+              const dashboard = "Device Admin";
+              console.log("Processing Device Dashboard Message: " + JSON.stringify(messageJSON));
+              const status = await updateDeviceZoho(workspace, messageJSON[i].device, messageJSON[i], dashboard);
+              console.log("Device Dashboard Updated: " + JSON.stringify(status));
             }
             // else if (messageJSON[i].dashboard === 'errors') {
             //   console.log("Processing Error Dashboard Message: " + JSON.stringify(messageJSON));
