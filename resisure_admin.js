@@ -138,7 +138,7 @@ const processCustomer = (customers, type, client) => {
             let ret = {
               "result": true
             };
-            console.log("Processing a " + type + " request for processing " + customers.length + " customers");
+            console.log("Processing a " + type + " request for processing customers");
               if (type === "manual") {
               //manual message
               for (let i in customers) {
@@ -166,11 +166,9 @@ const processCustomer = (customers, type, client) => {
                     console.log("Adding Customer: " + customer.customer_ref);
                     //insert the customer into the database
                     let dateAdded = new Date()
-                    await client.query('BEGIN');
                     const res = await client.query('INSERT INTO customers (customer_ref, customer_name, customer_email, date_added, customer_contact, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING customer_id', [customer.customer_ref, customer.customer_name, customer.email, dateAdded, customer.customer_contact, 1]);
                     console.log("Customer Inserted: " + res.rows[0].customer_id)
                     const sRep = await client.query('INSERT INTO customer_reports (customer_id, report_structure_property_id, report_output, status, summary_report) VALUES ($1, $2, $3, $4, $5) RETURNING customer_reports_id', [res.rows[0].customer_id, customer.property_reports, customer.report_output, 1 , customer.summary_reports]);
-                    client.query('COMMIT');
                     
                     statusMsg.status = 1; 
                     statusMsg.date_added = customer.datetime;
@@ -188,12 +186,10 @@ const processCustomer = (customers, type, client) => {
                     //update the customer in the database
 
                     let dateUpdated = new Date()
-                    await client.query('BEGIN');
                     const res = await client.query('UPDATE customers set customer_ref = $1, customer_name = $2, customer_email = $3, date_updated = $5, customer_contact = $6, status = $7 WHERE customer_id = $4 RETURNING customer_id', [customer.customer_ref, customer.customer_name, customer.email, customer.customer_id, dateUpdated, customer.customer_contact, 1])
                     console.log("Customer Updated: " + res.rows[0].customer_id)
                     const sRep = await client.query('UPDATE customer_reports set report_structure_property_id = $2, summary_report = $3, report_output = $4 WHERE customer_id = $1 RETURNING customer_reports_id', [customer.customer_id, customer.property_reports ,customer.summary_reports, customer.report_output]);
-                    
-                    client.query('COMMIT');
+
                     statusMsg.status = 1; //set status to 1 for amended customers
                     statusMsg.date_updated = customer.datetime;
 
@@ -209,11 +205,10 @@ const processCustomer = (customers, type, client) => {
                   } else if (customer.action === "deactivate") {
                     console.log("Deactivating Customer: " + customer.customer_id);
                     //deactivate the customer in the database
-                    await client.query('BEGIN');
                     const res = await client.query('UPDATE customers set status = 0 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]);
                     const rep = await client.query('UPDATE customer_reports set status = 0 WHERE customer_id = $1', [customer.customer_id]);
                     console.log("Customer Deactivated: " + res.rows[0].customer_id)
-                    client.query('COMMIT');
+
                     //set the status message
                     statusMsg.customer_id = res.rows[0].customer_id;
                     statusMsg.status = 0; //set status to 0 for deactivated customers
@@ -222,11 +217,9 @@ const processCustomer = (customers, type, client) => {
                   } else if (customer.action === "reactivate") {
                     console.log("Reactivating Customer: " + customer.customer_id);
                     //reactivate the customer in the database
-                    await client.query('BEGIN');
-                    const res = await pool.query('UPDATE customers set status = 1 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]);
-                    const rep = await pool.query('UPDATE customer_reports set status = 1 WHERE customer_id = $1', [customer.customer_id]);
+                    const res = await client.query('UPDATE customers set status = 1 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]);
+                    const rep = await client.query('UPDATE customer_reports set status = 1 WHERE customer_id = $1', [customer.customer_id]);
                     console.log("Customer Reactivated: " + res.rows[0].customer_id)
-                    client.query('COMMIT');
                     //set the status message
                     statusMsg.customer_id = res.rows[0].customer_id;
                     statusMsg.status = 1; //set status to 1 for reactivated customers
@@ -255,15 +248,13 @@ const processCustomer = (customers, type, client) => {
                   statusMsg.status = 2;
                   statusMsg.error = err.message;
                   status.push(statusMsg);
-                  await client.query('ROLLBACK');
                   ret.result = false;
                 };
               }
               if (status.length > 0){
               await postQueue(status);
               }
-              resolve(true);
-              return ret;
+              resolve(ret);
             } 
         })();
   });
@@ -278,7 +269,7 @@ const processProperty = (properties, type, client) => {
               "result": true
             };
               if (type === "manual")
-              {   console.log("Processing a " + type + " request for processing " + properties.length + " properties");
+              {   console.log("Processing a " + type + " request for processing properties");
               //manual message
               for (let i in properties) {
                 const property = properties[i];
@@ -297,20 +288,20 @@ const processProperty = (properties, type, client) => {
                   "mould_decline": property.mould_decline,
                   "flat_number": property.flat_number,
                   "street_number": property.street_number,
-                  "street_name": property.street_name,
-                  "town_name": property.town_name,
+                  "street_name": property.street,
+                  "town_name": property.town,
+                  "county": property.county,
+                  "city": property.city
                   }
                 if (property.action === "new") {
                     console.log("Adding property: " + property.property_code);
                     //insert the property into the database
 
                     let dateAdded = new Date()
-                    await client.query('BEGIN');
-                    const res = await pool.query('INSERT INTO properties (customer_id, property_code, date_added, area_id, status, mould_sensitivity, mould_index, mould_decline_coefficient) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING property_id', [property.customer_id, property.property_code, dateAdded, property.area_id, 1, property.mould_sensitivity, property.mould_index, property.mould_decline]);
+                    const res = await client.query('INSERT INTO properties (customer_id, property_code, date_added, area_id, status, mould_sensitivity, mould_index, mould_decline_coefficient) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING property_id', [property.customer_id, property.property_code, dateAdded, property.area_id, 1, property.mould_sensitivity, property.mould_index, property.mould_decline]);
                     console.log("property Inserted: " + res.rows[0].property_id)
-                    const InfoRes = await pool.query ('INSERT INTO property_info (flat_number, street_number, street_name, town_name, property_id, postcode) VALUES ($1, $2, $3, $4, $5) RETURNING property_info_id', [property.flat_number, property.street_number, property.street_name, property.town_name, res.rows[0].property_id, property.postcode]);
+                    const InfoRes = await client.query('INSERT INTO property_info (flat_number, street_number, street, town, property_id, postcode, status, county, city, date_added) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING property_info_id', [property.flat_number, property.street_number, property.street, property.town, res.rows[0].property_id, property.property_code, property.status, property.county, property.city, dateAdded]);
                     console.log("Property Info Inserted: " + InfoRes.rows[0].property_info_id)
-                    client.query('COMMIT');
                     //set the status message
                     statusMsg.property_id = res.rows[0].property_id;
                     statusMsg.status = 1; //default status is 1 for new properties
@@ -325,11 +316,9 @@ const processProperty = (properties, type, client) => {
                     property.status = parseInt(property.status);
                     property.customer_id = parseInt(property.customer_id);
                     let dateUpdated = new Date()
-                    await client.query('BEGIN');
-                    const res = await pool.query('UPDATE properties set customer_id = $2, property_code = $3, area_id = $4, date_updated = $5, status = $6, mould_sensitivity = $7, mould_index = $8, mould_decline_coefficient = $9 WHERE property_id = $1 RETURNING property_id', [property.property_id, property.customer_id, property.property_code, property.area_id, dateUpdated, property.status, property.mould_sensitivity, property.mould_index, property.mould_decline])
+                    const res = await client.query('UPDATE properties set customer_id = $2, property_code = $3, area_id = $4, date_updated = $5, status = $6, mould_sensitivity = $7, mould_index = $8, mould_decline_coefficient = $9 WHERE property_id = $1 RETURNING property_id', [property.property_id, property.customer_id, property.property_code, property.area_id, dateUpdated, property.status, property.mould_sensitivity, property.mould_index, property.mould_decline])
                     console.log("Property Updated: " + res.rows[0].property_id)
-                    const InfoRes = await pool.query ('UPDATE property_info set flat_number = $2, street_number = $3, street_name = $4, town_name = $5 WHERE property_id = $1 RETURNING property_info_id', [property.property_id, property.flat_number, property.street_number, property.street_name, property.town_name]);
-                    client.query('COMMIT');
+                    const InfoRes = await client.query('UPDATE property_info set flat_number = $2, street_number = $3, street = $4, town = $5, postcode = $6, county = $7, city = $8 WHERE property_id = $1 RETURNING property_info_id', [property.property_id, property.flat_number, property.street_number, property.street, property.town, property.property_code, property.county, property.city]);
                     //set the status message
                     statusMsg.date_updated = dateUpdated;
                     statusMsg.status = 1; //set status to 1 for amended properties
@@ -341,10 +330,9 @@ const processProperty = (properties, type, client) => {
                     console.log("Deactivating Property: " + property.property_id);
                     //deactivate the property in the database
                     property.property_id = parseInt(property.property_id);
-                    await client.query('BEGIN');
                     const res = await client.query('UPDATE properties set status = 0 WHERE property_id = $1 RETURNING property_id', [property.property_id]);
                     
-                    client.query('COMMIT');
+
 
                     console.log("Property Deactivated: " + res.rows[0].property_id)
                     //set the status message
@@ -356,11 +344,11 @@ const processProperty = (properties, type, client) => {
                   } else if (property.action === "reactivate") {
                     console.log("Reactivating property: " + property.property_id);
                     //reactivate the property in the database
-                    await client.query('BEGIN');
-                    const res = await pool.query('UPDATE properties set status = 1 WHERE property_id = $1 RETURNING customer_id', [property.property_id]
+
+                    const res = await client.query('UPDATE properties set status = 1 WHERE property_id = $1 RETURNING customer_id', [property.property_id]
                     );
                     console.log("Property Reactivated: " + res.rows[0].property_id)
-                    client.query('COMMIT');
+
                     //set the status message
                     statusMsg.property_id = res.rows[0].property_id;
                     statusMsg.status = 1; //set status to 1 for reactivated properties
@@ -384,7 +372,6 @@ const processProperty = (properties, type, client) => {
                   statusMsg.error = err.message;
                   status.push(statusMsg);
                   ret.result = false;
-                  await client.query('ROLLBACK');
                 }
                 }
                 //post status message
@@ -394,8 +381,7 @@ const processProperty = (properties, type, client) => {
             else {
 
             }
-            resolve(true);
-            return ret;
+            resolve(ret);
     })();
   });
 }
@@ -409,7 +395,7 @@ const processArea = (areas, type, client) => {
         "result": true
       };
       if (type === "manual"){
-        console.log("Processing a " + type + " request for processing " + areas.length + " areas");
+        console.log("Processing a " + type + " request for processing areas");
         //manual message
         for (let i in areas) {
           const area = areas[i];
@@ -427,11 +413,9 @@ const processArea = (areas, type, client) => {
               console.log("Adding area: " + area.area_code);
               //insert the area into the database
               let dateAdded = new Date()
-              await client.query('BEGIN');
               const res = await client.query('INSERT INTO areas (area_code, area_city, area_county, date_added) VALUES ($1, $2, $3, $4) RETURNING area_id', [area.area_code, area.area_city, area.area_county, dateAdded]);
               console.log("area Inserted: " + res.rows[0].area_id)
               //set the status message
-              client.query('COMMIT');
               statusMsg.date_added = dateAdded;
               statusMsg.area_id = res.rows[0].area_id;
               status.push(statusMsg);
@@ -439,10 +423,8 @@ const processArea = (areas, type, client) => {
           } else if (area.action === "amend") {
               console.log("Updating Area: " + area.area_id);
               //update the area in the database
-              await client.query('BEGIN');
               const res = await client.query('UPDATE areas set area_code = $2, area_city = $3, area_county = $4 WHERE area_id = $1 RETURNING area_id', [area.area_id, area.area_code, area.area_city, area.area_county])
               console.log("Area Updated: " + res.rows[0].area_id)
-              client.query('COMMIT');
               //set the status message
               statusMsg.area_id = res.rows[0].area_id;
               status.push(statusMsg);
@@ -461,7 +443,6 @@ const processArea = (areas, type, client) => {
           statusMsg.error = err.message;
           status.push(statusMsg);
           ret.result = false;
-          await client.query('ROLLBACK');
         }
         }
         //post status message
@@ -470,12 +451,71 @@ const processArea = (areas, type, client) => {
     else {
 
     }
-    resolve(true);
-    return ret;
+    resolve(ret);
   })();
 });
 }
 //Connect to the message broker
+
+const processDevices = (devices, type, client) => {
+  return new Promise((resolve) => {
+    (async () => {
+      let status = [];
+      let statusMsg = {};
+      let ret = {
+        "result": true
+      };
+      if (type === "manual"){
+        console.log("Processing a " + type + " request for processing devices");
+        //manual message
+        for (let i in devices) {
+          const area = devices[i];
+          try {
+            statusMsg = {
+            "dashboard": "devices",
+            "device": devices.device,
+            "action": devices.action,
+            "device_id": devices.device_id,
+            "property_id": devices.property_id,
+            }
+          if (devices.action === "Edit") {
+              console.log("Editing Device: " + devices.device_id);
+              //insert the area into the database
+              const res = await client.query('UPDATE devices set property_id = $1 RETURNING device_id', [devices.property_id]);
+              console.log("area Inserted: " + res.rows[0].area_id)
+              //set the status message
+              statusMsg.date_added = dateAdded;
+              statusMsg.area_id = res.rows[0].area_id;
+              status.push(statusMsg);
+
+          } else {
+            // action already checked in dashboard api
+          }
+
+        } catch (err) {
+          console.log("Failed to process Area: " + err.message);
+          const errJSON = {
+            "process": "databaseInsert",
+            "error": "Failed to process Area: " + err.message,
+            "data": area
+          }
+          await putError(errJSON, 'resisure_admin', errJSON.error, 0);
+          statusMsg.error = err.message;
+          status.push(statusMsg);
+          ret.result = false;
+        }
+        }
+        //post status message
+        await postQueue(status);
+      }
+    else {
+
+    }
+      resolve(ret);
+    })();
+  }
+  );
+}
 
 
 
@@ -540,14 +580,17 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
           //determine if the message is a manual or automatic message
           const client = await pool.connect();
           
+          await client.query('BEGIN');
           const custRet = await processCustomer(messageJSON.customers, messageJSON.type, client);
-
-          if (custRet.result === true) {
-            const areaRet = await processArea(messageJSON.areas, messageJSON.type, client);
-
-            if (areaRet.result === true) {
-              const propRet = await processProperty(messageJSON.properties, messageJSON.type, client);
-          }
+          const areaRet = await processArea(messageJSON.areas, messageJSON.type, client);
+          const propRet = await processProperty(messageJSON.properties, messageJSON.type, client);
+          const devRet = await processDevices(messageJSON.devices, messageJSON.type, client);
+          if (custRet.result && areaRet.result && propRet.result && devRet.result) {
+            await client.query('COMMIT');
+            console.log("All data processed successfully");
+          } else {
+            await client.query('ROLLBACK');
+            console.log("There were errors processing the data, please check the error log");
           }
           client.release();
           
