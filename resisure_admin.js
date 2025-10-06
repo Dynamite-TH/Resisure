@@ -469,23 +469,21 @@ const processDevices = (devices, type, client) => {
         console.log("Processing a " + type + " request for processing devices");
         //manual message
         for (let i in devices) {
-          const area = devices[i];
+          const device = devices[i];
           try {
             statusMsg = {
             "dashboard": "devices",
-            "device": devices.device,
-            "action": devices.action,
-            "device_id": devices.device_id,
-            "property_id": devices.property_id,
+            "device": device.device,
+            "action": device.action,
+            "device_id": device.device_id,
+            "property_id": device.property_id,
             }
-          if (devices.action === "Edit") {
-              console.log("Editing Device: " + devices.device_id);
+          if (device.action === "Edit") {
+              console.log("Editing Device: " + device.device_id);
               //insert the area into the database
-              const res = await client.query('UPDATE devices set property_id = $1 RETURNING device_id', [devices.property_id]);
-              console.log("area Inserted: " + res.rows[0].area_id)
+              const res = await client.query('UPDATE devices set property_id = $1 WHERE device_id = $2 RETURNING device_id', [device.property_id, device.device_id]);
+              console.log("Device Edited: " + res.rows[0].device_id)
               //set the status message
-              statusMsg.date_added = dateAdded;
-              statusMsg.area_id = res.rows[0].area_id;
               status.push(statusMsg);
 
           } else {
@@ -497,7 +495,7 @@ const processDevices = (devices, type, client) => {
           const errJSON = {
             "process": "databaseInsert",
             "error": "Failed to process Area: " + err.message,
-            "data": area
+            "data": device
           }
           await putError(errJSON, 'resisure_admin', errJSON.error, 0);
           statusMsg.error = err.message;
