@@ -181,7 +181,7 @@ const getAdminRequest = (workspace = "", dashboard = "") => {
 };
 
 //Post a JSON message to a queue
-const postQueue = (table, msgJSON) => {
+const postQueue = (msgJSON) => {
   return new Promise((resolve) => {
     //put message on data insert queue
     (async () => {
@@ -200,36 +200,14 @@ const postQueue = (table, msgJSON) => {
       try {
         const date = new Date();
         let jsonData = {};
-        if (table === "customers") {
-          jsonData = {
+        jsonData = {
             "type": "manual",
-            "table": table,
+            "table": "admin",
             "datetime": date,
-            "customers": msgJSON
+            "customers": msgJSON.customers,
+            "properties": msgJSON.properties,
+            "areas": msgJSON.areas,
           }
-        }
-        else if (table === "properties") {
-          jsonData = {
-            "type": "manual",
-            "table": table,
-            "datetime": date,
-            "properties": msgJSON
-          }
-        } else if (table === "Areas") {
-          jsonData = {
-            "type": "manual",
-            "table": table,
-            "datetime": date,
-            "areas": msgJSON
-          }
-        } else if (table === "devices") {
-          jsonData = {
-            "type": "manual",
-            "table": table,
-            "datetime": date,
-            "devices": msgJSON
-          }
-        }
         console.log("Message to Queue: " + JSON.stringify(jsonData));
         //Queue Message
         let queueMsg = JSON.stringify(jsonData);;
@@ -258,11 +236,11 @@ const postQueue = (table, msgJSON) => {
 
 
 
-const processCustomers = () => {
+const processCustomers = (adminMsg) => {
   return new Promise((resolve) => {
     (async () => {
       //set return JSON
-      let retJSON = { "result": false };
+      let retJSON = { "result": true };
       try {
         //TODO Get Workspace froma CONFIG file
         const dashboard = "Customer Admin";
@@ -314,7 +292,6 @@ const processCustomers = () => {
               }
             }
             //process each record
-            let messages = [];
             let cID, cRef, cName, cCName, cEmail, cSReports, cPReports, cAction, cStat, cCust, cRepOutput;
 
             for (let r = 0; r < custData.rows.length; r++) {
@@ -355,25 +332,25 @@ const processCustomers = () => {
                 if (!cID && cAction === 1) {
                   //post the message to the queue
                   msgJSON.action = "new";
-                  messages.push(msgJSON);
+                  adminMsg.push(msgJSON);
 
                 } else if (cAction == 2 && cID > 0) {
                   //we have a customer ID so we need to update the customer
                   //post the message to the queue
                   msgJSON.action = "amend";
 
-                  messages.push(msgJSON);
+                  adminMsg.push(msgJSON);
                   console.log("Customer Updated: " + cID);
                 } else if (cAction == 3 && cID > 0) {
                   //post the message to the queue
                   msgJSON.action = "deactivate";
-                  messages.push(msgJSON);
+                  adminMsg.push(msgJSON);
                   console.log("Customer Deactivated: " + cID);
 
                 } else if (cAction == 4 && cID > 0) {
                   //post the message to the queue
                   msgJSON.action = "reactivate";
-                  messages.push(msgJSON);
+                  adminMsg.push(msgJSON);
                   console.log("Customer Reactivated: " + cID);
 
 
@@ -450,7 +427,7 @@ const processCustomers = () => {
                     }
                     if (msgJSON.action == "dbToZohoUpdate") {
                       msgJSON.error = "Data Discrepency, data overwritten for the following fields: " + dataMismatch.join(", ");
-                      messages.push(msgJSON);
+                      adminMsg.push(msgJSON);
                     }
                     else{
                       console.log("No Data Mismatches for Customer ID: " + cID);
@@ -486,22 +463,6 @@ const processCustomers = () => {
                 console.log(errJSON.error);
               }
             
-            if (messages.length > 0) {
-              //console.log("Messages to Queue: " + JSON.stringify(messages));
-              const table = "customers";
-              let custData = await postQueue(table, messages);
-              //console.log("Messages Posted to Queue: " + JSON.stringify(messages))
-              //console.log(messages);
-              if (custData.result) {
-                console.log("Messages Posted to Queue");
-                retJSON.result = true;
-              } else {
-                console.log("Failed to post messages to queue");
-                retJSON.result = false;
-              }
-            } else {
-              //No messages to queue
-            }
           }} else {
             //Failed to get report requests
             //Error logged in getReports
@@ -524,11 +485,11 @@ const processCustomers = () => {
   });
 };
 
-const processProperties = () => {
+const processProperties = (adminMsg) => {
   return new Promise((resolve) => {
     (async () => {
       //set return JSON
-      let retJSON = { "result": false };
+      let retJSON = { "result": true };
       try {
         //TODO Get Workspace froma CONFIG file
         const dashboard = "Property_admin_view";
@@ -540,7 +501,7 @@ const processProperties = () => {
           //check we have records to process
           if (PropData.rows.length > 0) {
             //work out which column is which
-            let pPropID, pCustID, pPropCode, pStatus, pAreaID, pPropertyAction, pProperty, pTown, pStreet, pStreetNum, pFlatNum, pCounty, pCity;
+            let pPropID, pCustID, pPropCode, pStatus, pAreaID, pPropertyAction, pProperty, pTown, pStreet, pStreetNum, pFlatNum, pCounty, pCity, dRef, dID, dStatus, dPropertyID;
             for (let c = 0; c < PropData.column_order.length; c++) {
               switch (PropData.column_order[c].toString().toLowerCase()) {
                 case "property id":
@@ -552,7 +513,7 @@ const processProperties = () => {
                 case "property code":
                   pPropCode = c;
                   break;
-                case "status":
+                case "prop_status":
                   pStatus = c;
                   break;
                 case "area_id":
@@ -582,13 +543,24 @@ const processProperties = () => {
                 case "city":
                   pCity = c;
                   break;
+                case "device reference":
+                  dRef = c;
+                  break;
+                case "device_id":
+                  dID = c;
+                  break;
+                case "status":
+                  dStatus = c;
+                  break;
+                case "property_id":
+                  dPropertyID = c;
+                  break;
                 default:
                   break;
               }
             }
             //process each record
-            let messages = [];
-            let pID, pCID, pCode, pStat, pAreID, pAction, pProp, pTownName, pStreetName, pStreetNumVal, pFlatNumVal, pCount, pCityName;
+            let pID, pCID, pCode, pStat, pAreID, pAction, pProp, pTownName, pStreetName, pStreetNumVal, pFlatNumVal, pCount, pCityName, dDeviceRef, dDeviceID, dDeviceStatus, dPropID;
 
             for (let r = 0; r < PropData.rows.length; r++) {
 
@@ -605,8 +577,13 @@ const processProperties = () => {
               pFlatNumVal = PropData.rows[r][pFlatNum];
               pCount = PropData.rows[r][pCounty];
               pCityName = PropData.rows[r][pCity];
+              dDeviceRef = PropData.rows[r][dRef];
+              dDeviceID = parseInt(PropData.rows[r][dID]);
+              dDeviceStatus = parseInt(PropData.rows[r][dStatus]);
+              dPropID = parseInt(PropData.rows[r][dPropertyID]);
+              
 
-              console.log(pProp, pID, pCID, pCode, pStat, pAreID, pAction + " Property Data");
+              console.log(pProp, pID, pCID, pCode, pStat, pAreID, pAction, dDeviceRef, dDeviceID + " Property Data");
               //check if we have a customer ID
 
               let msgJSON = {
@@ -622,7 +599,11 @@ const processProperties = () => {
                 "street_number": pStreetNumVal,
                 "flat_number": pFlatNumVal,
                 "county": pCount,
-                "city": pCityName
+                "city": pCityName,
+                "device_id": dDeviceID,
+                "device_ref": dDeviceRef,
+                "device_status": dDeviceStatus,
+                "device_property_id": dPropID
               }
 
               //check the action
@@ -634,7 +615,7 @@ const processProperties = () => {
                     console.log("Creating New Property: " + pCode);
                     //post the message to the queue
                     msgJSON.action = "new";
-                    messages.push(msgJSON);
+                    adminMsg.push(msgJSON);
 
                   } else if (pAction == 2 && pID > 0) {
                     //we have a property ID so we can update the property
@@ -642,20 +623,20 @@ const processProperties = () => {
                     console.log("Updating Property: " + pID);
                     //post the message to the queue
                     msgJSON.action = "amend";
-                    messages.push(msgJSON);
+                    adminMsg.push(msgJSON);
 
                   } else if (pAction == 3 && pID) {
                     //we have a property ID so we can deactivate the property
                     console.log("Deactivating Property: " + pID);
                     //post the message to the queue
                     msgJSON.action = "deactivate";
-                    messages.push(msgJSON);
+                    adminMsg.push(msgJSON);
                   } else if (pAction == 4 && pID) {
                     //we have a property ID so we can reactivate the property
                     console.log("Reactivating Property: " + pID);
                     //post the message to the queue
                     msgJSON.action = "reactivate";
-                    messages.push(msgJSON);
+                    adminMsg.push(msgJSON);
                   }
                 } else if (!pCID) {
                   console.log("Customer ID not found for Property: " + pID);
@@ -667,11 +648,18 @@ const processProperties = () => {
                   console.log("No Property Admin Requests to Process");
                   try {
                     const dbSync = await pool.query('SELECT * FROM properties WHERE property_id=$1', [pID]);
+                    const dbPropInfo = await pool.query('SELECT * FROM property_info WHERE property_id=$1',[pID]);
+                    const dbDevice = await pool.query('SELECT * FROM devices WHERE property_id=$1', [pID])
                     const dbPropCode = dbSync.rows[0].property_code;
                     const dbCustID = dbSync.rows[0].customer_id;
-                    const dbAreaID = dbSync.rows[0].area_id;
                     const dbStatus = dbSync.rows[0].status;
-                    console.log(dbPropCode, dbCustID, dbAreaID, dbStatus + " DB Property Data");
+                    const dbTown = dbPropInfo.rows[0].town;
+                    const dbStreet = dbPropInfo.rows[0].street;
+                    const dbStreetNum = dbPropInfo.rows[0].street_number;
+                    const dbflatNum = dbPropInfo.rows[0].flat_number;
+                    const dbCity = dbPropInfo.rows[0].city
+                    const dbDev = dbDevice.rows[r].device_ref
+                    console.log(dbPropCode, dbCustID, dbStatus + " DB Property Data");
                     //check for mismatches
                     if (dbSync) {
                       let dataMismatch = ""
@@ -687,9 +675,9 @@ const processProperties = () => {
                         msgJSON.action = "dbToZohoUpdate";
                         dataMismatch = dataMismatch + " Customer ID, ";
                       }
-                      if (dbAreaID != pAreID) {
-                        console.log("Area ID Mismatch for Property ID " + pID + " Dashboard: " + pAreID + " DB: " + dbAreaID);
-                        msgJSON.area_id = dbAreaID;
+                      if (dbTown != pTownName) {
+                        console.log("Town Mismatch for Property ID " + pID + " Dashboard: " + pAreID + " DB: " + dbAreaID);
+                        msgJSON.Town_name = dbTown;
                         msgJSON.action = "dbToZohoUpdate";
                         dataMismatch = dataMismatch + " Area ID, ";
                       }
@@ -699,9 +687,34 @@ const processProperties = () => {
                         msgJSON.action = "dbToZohoUpdate";
                         dataMismatch = dataMismatch + " Status, ";
                       }
+                      if (dbStreet != pStreetName){
+                        console.log("Street mismatch for ID" + pID + " Dashboard: "+ pStreetName+ " DB: " +dbStreet)
+                        msgJSON.street = dbStreet;
+                        msgJSON.action = "dbToZohoUpdate"
+                      }
+                      if (dbStreetNum != pStreetNum) {
+                        console.log("Street number mismatch for ID" + pID + " Dashboard: "+ pStreetName+ " DB: " +dbStreet)
+                        msgJSON.street_number = dbStreetNum;
+                        msgJSON.action = "dbToZohoUpdate"
+                      }
+                      if (dbflatNum != pFlatNum) {
+                        console.log("Flat Number mismatch for ID" + pID + " Dashboard: "+ pStreetName+ " DB: " +dbStreet)
+                        msgJSON.flat_number = dbflatNum;
+                        msgJSON.action = "dbToZohoUpdate"
+                      }
+                      if (dbCity != pCity) {
+                        console.log("City mismatch for ID" + pID + " Dashboard: "+ pStreetName+ " DB: " +dbStreet)
+                        msgJSON.city = dbCity;
+                        msgJSON.action = "dbToZohoUpdate"
+                      }
+                      if (dbDev =! dDeviceRef) {
+                        console.log("Device mismatch for ID" + pID + " Dashboard: "+ pStreetName+ " DB: " +dbStreet)
+                        msgJSON.device_ref = dbDev;
+                        msgJSON.action = "dbToZohoUpdate"
+                      }
                       if (msgJSON.action == "dbToZohoUpdate") {
                         msgJSON.error = "Data Discrepency, data overwritten for the following fields: " + dataMismatch.slice(0, -2);
-                        messages.push(msgJSON);
+                        adminMsg.push(msgJSON);
                       }
                         //post the message to the queue
 
@@ -712,7 +725,7 @@ const processProperties = () => {
                     } catch (err) {
                       console.log("Failed to sync property data: " + err.message);
                       const errJSON = {
-                        "process": "processProperties",
+                        "process": "DatabasePropertySync",
                         "error": "Failed to sync property data: " + err.message,
                         "data": msgJSON
                       }
@@ -733,21 +746,6 @@ const processProperties = () => {
                 const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
                 console.log(errJSON.error);
               }
-            }
-            if (messages.length > 0) {
-              //console.log("Messages to Queue: " + JSON.stringify(messages));
-              const table = "properties";
-              let repdata = await postQueue(table, messages);
-              //console.log(messages);
-              if (repdata.result) {
-                console.log("Messages Posted to Queue");
-                retJSON.result = true;
-              } else {
-                console.log("Failed to post messages to queue");
-                retJSON.result = false;
-              }
-            } else {
-              //No messages to queue
             }
           } else {
             //Failed to get report requests
@@ -771,186 +769,186 @@ const processProperties = () => {
   });
 };
 
-const processDevices = () => {
+// const processDevices = () => {
+//   return new Promise((resolve) => {
+//     (async () => {
+//       //set return JSON
+//       let retJSON = { "result": false };
+//       try {
+//         //TODO Get Workspace froma CONFIG file
+//         const dashboard = "device_admin_view";
+//         //Get Report Requests to process
+//         let retDev = await getAdminRequest(workspace, dashboard);
+//         //check for customer updates
+//         if (retDev.status == 200) {
+//           const DevData = retDev.data["response"]["result"];
+//           //check we have records to process
+//           if (DevData.rows.length > 0) {
+//             //work out which column is which
+//             let dPropID, dDevID, dAction, dDevice;
+//             for (let c = 0; c < DevData.column_order.length; c++) {
+//               switch (DevData.column_order[c].toString().toLowerCase()) {
+//                 case "property_id":
+//                   dPropID = c;
+//                   break;
+//                 case "device_id":
+//                   dDevID = c;
+//                   break;
+//                 case "action_code":
+//                   dAction = c;
+//                   break;
+//                 case "device":
+//                   dDevice = c;
+//                   break;
+//                 default:
+//                   break;
+//               }
+//             }
+//             //process each record
+//             let messages = [];
+//             let dPropertyID, dDeviceID, dActionType, dDeviceType;
+
+//             for (let r = 0; r < DevData.rows.length; r++) {
+
+//               dPropertyID = parseInt(DevData.rows[r][dPropID]);
+//               dDeviceID = parseInt(DevData.rows[r][dDevID]);
+//               dActionType = parseInt(DevData.rows[r][dAction]);
+//               dDeviceType = parseInt(DevData.rows[r][dDevice]);
+//               console.log(dPropertyID, dDeviceID, dActionType + " Device Data");
+//               //check if we have a customer ID
+
+//               let msgJSON = {
+//                 "device": dDeviceType,
+//                 "action": dActionType,
+//                 "device_id": dDeviceID,
+//                 "property_id": dPropertyID
+//               }
+
+//               //check the action
+//               //1 = new, 2 = amend, 3 = deactivate
+//               try {
+//                 if (dPropertyID) {
+//                   if (dActionType === 1) {
+//                     //we do not have a property ID so we can create a new property
+//                     console.log("Editing Device: " + dDeviceID);
+//                     //post the message to the queue
+//                     msgJSON.action = "Edit";
+//                     messages.push(msgJSON);
+//                   } 
+//                 } else {  
+//                   console.log("No Device Admin Requests to Process");
+//                   try {
+//                   //   const dbSync = await pool.query('SELECT * FROM properties WHERE property_id=$1', [pID]);
+//                   //   const dbPropCode = dbSync.rows[0].property_code;
+//                   //   const dbCustID = dbSync.rows[0].customer_id;
+//                   //   const dbAreaID = dbSync.rows[0].area_id;
+//                   //   const dbStatus = dbSync.rows[0].status;
+//                   //   console.log(dbPropCode, dbCustID, dbAreaID, dbStatus + " DB Property Data");
+//                   //   //check for mismatches
+//                   //   if (dbSync) {
+//                   //     let dataMismatch = ""
+//                   //     if (dbPropCode != pCode) {
+//                   //       console.log("Property Code Mismatch for ID " + pID + " Dashboard: " + pCode + " DB: " + dbPropCode);
+//                   //       msgJSON.property_code = dbPropCode;
+//                   //       msgJSON.action = "dbToZohoUpdate";
+//                   //       dataMismatch = dataMismatch + " Property Code, ";
+//                   //     }
+//                   //     if (dbCustID != pCID) {
+//                   //       console.log("Customer ID Mismatch for Property ID " + pID + " Dashboard: " + pCID + " DB: " + dbCustID);
+//                   //       msgJSON.customer_id = dbCustID;
+//                   //       msgJSON.action = "dbToZohoUpdate";
+//                   //       dataMismatch = dataMismatch + " Customer ID, ";
+//                   //     }
+//                   //     if (dbAreaID != pAreID) {
+//                   //       console.log("Area ID Mismatch for Property ID " + pID + " Dashboard: " + pAreID + " DB: " + dbAreaID);
+//                   //       msgJSON.area_id = dbAreaID;
+//                   //       msgJSON.action = "dbToZohoUpdate";
+//                   //       dataMismatch = dataMismatch + " Area ID, ";
+//                   //     }
+//                   //     if (dbStatus != pStat) {
+//                   //       console.log("Property Status Mismatch for ID " + pID + " Dashboard: " + pStat + " DB: " + dbStatus);
+//                   //       msgJSON.status = dbStatus;
+//                   //       msgJSON.action = "dbToZohoUpdate";
+//                   //       dataMismatch = dataMismatch + " Status, ";
+//                   //     }
+//                   //     if (msgJSON.action == "dbToZohoUpdate") {
+//                   //       msgJSON.error = "Data Discrepency, data overwritten for the following fields: " + dataMismatch.slice(0, -2);
+//                   //       messages.push(msgJSON);
+//                   //     }
+//                   //       //post the message to the queue
+
+//                   //     } else {
+//                   //       //no property found
+//                   //       console.log("No Property found in DB for ID: " + pID);
+//                   //     }
+//                     } catch (err) {
+//                       console.log("Failed to sync property data: " + err.message);
+//                       const errJSON = {
+//                         "process": "processProperties",
+//                         "error": "Failed to sync property data: " + err.message,
+//                         "data": msgJSON
+//                       }
+//                       const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
+//                       console.log(errJSON.error);
+//                   }
+//                 }
+
+
+
+//               } catch (err) {
+//                 //log error
+//                 const errJSON = {
+//                   "process": "processProperties",
+//                   "error": "Failed to process Customer Admin Request: " + err.message,
+//                   "data": msgJSON
+//                 }
+//                 const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
+//                 console.log(errJSON.error);
+//               }
+//             }
+//             if (messages.length > 0) {
+//               //console.log("Messages to Queue: " + JSON.stringify(messages));
+//               const table = "devices";
+//               let repdata = await postQueue(table, messages);
+//               //console.log(messages);
+//               if (repdata.result) {
+//                 console.log("Messages Posted to Queue");
+//                 retJSON.result = true;
+//               } else {
+//                 console.log("Failed to post messages to queue");
+//                 retJSON.result = false;
+//               }
+//             } else {
+//               //No messages to queue
+//             }
+//           } else {
+//             //Failed to get report requests
+//             //Error logged in getReports
+//             retJSON.result = false;
+//           }
+//         }
+//         resolve(retJSON);
+//       } catch (err) {
+//         //log error
+//         const errJSON = {
+//           "process": "processCustomers",
+//           "error": "Failed to process Customers: " + err.message,
+//           "data": {}
+//         }
+//         const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
+//         console.log(errJSON.error);
+//         resolve(retJSON);
+//       }
+//     })();
+//   });
+// };
+
+
+const processAreas = (adminMsg) => {
   return new Promise((resolve) => {
     (async () => {
       //set return JSON
-      let retJSON = { "result": false };
-      try {
-        //TODO Get Workspace froma CONFIG file
-        const dashboard = "device_admin_view";
-        //Get Report Requests to process
-        let retDev = await getAdminRequest(workspace, dashboard);
-        //check for customer updates
-        if (retDev.status == 200) {
-          const DevData = retDev.data["response"]["result"];
-          //check we have records to process
-          if (DevData.rows.length > 0) {
-            //work out which column is which
-            let dPropID, dDevID, dAction, dDevice;
-            for (let c = 0; c < DevData.column_order.length; c++) {
-              switch (DevData.column_order[c].toString().toLowerCase()) {
-                case "property_id":
-                  dPropID = c;
-                  break;
-                case "device_id":
-                  dDevID = c;
-                  break;
-                case "action_code":
-                  dAction = c;
-                  break;
-                case "device":
-                  dDevice = c;
-                  break;
-                default:
-                  break;
-              }
-            }
-            //process each record
-            let messages = [];
-            let dPropertyID, dDeviceID, dActionType, dDeviceType;
-
-            for (let r = 0; r < DevData.rows.length; r++) {
-
-              dPropertyID = parseInt(DevData.rows[r][dPropID]);
-              dDeviceID = parseInt(DevData.rows[r][dDevID]);
-              dActionType = parseInt(DevData.rows[r][dAction]);
-              dDeviceType = parseInt(DevData.rows[r][dDevice]);
-              console.log(dPropertyID, dDeviceID, dActionType + " Device Data");
-              //check if we have a customer ID
-
-              let msgJSON = {
-                "device": dDeviceType,
-                "action": dActionType,
-                "device_id": dDeviceID,
-                "property_id": dPropertyID
-              }
-
-              //check the action
-              //1 = new, 2 = amend, 3 = deactivate
-              try {
-                if (dPropertyID) {
-                  if (dActionType === 1) {
-                    //we do not have a property ID so we can create a new property
-                    console.log("Editing Device: " + dDeviceID);
-                    //post the message to the queue
-                    msgJSON.action = "Edit";
-                    messages.push(msgJSON);
-                  } 
-                } else {  
-                  console.log("No Device Admin Requests to Process");
-                  try {
-                  //   const dbSync = await pool.query('SELECT * FROM properties WHERE property_id=$1', [pID]);
-                  //   const dbPropCode = dbSync.rows[0].property_code;
-                  //   const dbCustID = dbSync.rows[0].customer_id;
-                  //   const dbAreaID = dbSync.rows[0].area_id;
-                  //   const dbStatus = dbSync.rows[0].status;
-                  //   console.log(dbPropCode, dbCustID, dbAreaID, dbStatus + " DB Property Data");
-                  //   //check for mismatches
-                  //   if (dbSync) {
-                  //     let dataMismatch = ""
-                  //     if (dbPropCode != pCode) {
-                  //       console.log("Property Code Mismatch for ID " + pID + " Dashboard: " + pCode + " DB: " + dbPropCode);
-                  //       msgJSON.property_code = dbPropCode;
-                  //       msgJSON.action = "dbToZohoUpdate";
-                  //       dataMismatch = dataMismatch + " Property Code, ";
-                  //     }
-                  //     if (dbCustID != pCID) {
-                  //       console.log("Customer ID Mismatch for Property ID " + pID + " Dashboard: " + pCID + " DB: " + dbCustID);
-                  //       msgJSON.customer_id = dbCustID;
-                  //       msgJSON.action = "dbToZohoUpdate";
-                  //       dataMismatch = dataMismatch + " Customer ID, ";
-                  //     }
-                  //     if (dbAreaID != pAreID) {
-                  //       console.log("Area ID Mismatch for Property ID " + pID + " Dashboard: " + pAreID + " DB: " + dbAreaID);
-                  //       msgJSON.area_id = dbAreaID;
-                  //       msgJSON.action = "dbToZohoUpdate";
-                  //       dataMismatch = dataMismatch + " Area ID, ";
-                  //     }
-                  //     if (dbStatus != pStat) {
-                  //       console.log("Property Status Mismatch for ID " + pID + " Dashboard: " + pStat + " DB: " + dbStatus);
-                  //       msgJSON.status = dbStatus;
-                  //       msgJSON.action = "dbToZohoUpdate";
-                  //       dataMismatch = dataMismatch + " Status, ";
-                  //     }
-                  //     if (msgJSON.action == "dbToZohoUpdate") {
-                  //       msgJSON.error = "Data Discrepency, data overwritten for the following fields: " + dataMismatch.slice(0, -2);
-                  //       messages.push(msgJSON);
-                  //     }
-                  //       //post the message to the queue
-
-                  //     } else {
-                  //       //no property found
-                  //       console.log("No Property found in DB for ID: " + pID);
-                  //     }
-                    } catch (err) {
-                      console.log("Failed to sync property data: " + err.message);
-                      const errJSON = {
-                        "process": "processProperties",
-                        "error": "Failed to sync property data: " + err.message,
-                        "data": msgJSON
-                      }
-                      const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
-                      console.log(errJSON.error);
-                  }
-                }
-
-
-
-              } catch (err) {
-                //log error
-                const errJSON = {
-                  "process": "processProperties",
-                  "error": "Failed to process Customer Admin Request: " + err.message,
-                  "data": msgJSON
-                }
-                const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
-                console.log(errJSON.error);
-              }
-            }
-            if (messages.length > 0) {
-              //console.log("Messages to Queue: " + JSON.stringify(messages));
-              const table = "devices";
-              let repdata = await postQueue(table, messages);
-              //console.log(messages);
-              if (repdata.result) {
-                console.log("Messages Posted to Queue");
-                retJSON.result = true;
-              } else {
-                console.log("Failed to post messages to queue");
-                retJSON.result = false;
-              }
-            } else {
-              //No messages to queue
-            }
-          } else {
-            //Failed to get report requests
-            //Error logged in getReports
-            retJSON.result = false;
-          }
-        }
-        resolve(retJSON);
-      } catch (err) {
-        //log error
-        const errJSON = {
-          "process": "processCustomers",
-          "error": "Failed to process Customers: " + err.message,
-          "data": {}
-        }
-        const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
-        console.log(errJSON.error);
-        resolve(retJSON);
-      }
-    })();
-  });
-};
-
-
-const processAreas = () => {
-  return new Promise((resolve) => {
-    (async () => {
-      //set return JSON
-      let retJSON = { "result": false };
+      let retJSON = { "result": true };
       try {
         //TODO Get Workspace froma CONFIG file
         const dashboard = "Area Admin";
@@ -988,7 +986,6 @@ const processAreas = () => {
               }
             }
             //process each record
-            let messages = [];
             let aCode, aCity, aCounty, aAction, aArea, aID;
 
             for (let r = 0; r < AreaData.rows.length; r++) {
@@ -1019,7 +1016,7 @@ const processAreas = () => {
                   console.log("Creating New Area: " + aCode);
                   //post the message to the queue
                   msgJSON.action = "new";
-                  messages.push(msgJSON);
+                  adminMsg.push(msgJSON);
 
                 } else if (aAction == 2 && aID > 0) {
                   //we have a property ID so we can update the property
@@ -1027,7 +1024,7 @@ const processAreas = () => {
                   console.log("Updating Area: " + aID);
                   //post the message to the queue
                   msgJSON.action = "amend";
-                  messages.push(msgJSON);
+                  adminMsg.push(msgJSON);
 
 
                 } else {
@@ -1046,21 +1043,6 @@ const processAreas = () => {
                 const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
                 console.log(errJSON.error);
               }
-            }
-            if (messages.length > 0) {
-              //console.log("Messages to Queue: " + JSON.stringify(messages));
-              const table = "Areas";
-              let repdata = await postQueue(table, messages);
-              //console.log(messages);
-              if (repdata.result) {
-                console.log("Messages Posted to Queue");
-                retJSON.result = true;
-              } else {
-                console.log("Failed to post messages to queue");
-                retJSON.result = false;
-              }
-            } else {
-              //No messages to queue
             }
           } else {
             //Failed to get report requests
@@ -1119,36 +1101,50 @@ const connectMessageBroker = async (reconnectDelay = 500) => {
           console.log(messageJSON);
           switch (messageJSON.type.toString().toLowerCase()) {
             case "scheduled":
-              //process customer admin requests
-              const custRep = await processCustomers();
-              if (custRep.result) {
-                console.log("Customers Processed Successfully");
-              } else {
-
+              let adminMsg = [];
+              let adminCust = [], adminProp = [], adminArea = [];
+              try {
+                //get any admin requests
+              const custRep = await processCustomers(adminMsg);
+              const areaRep = await processAreas(adminMsg);
+              const propRep = await processProperties(adminMsg);
+              if (custRep.result && areaRep.result && propRep.result){
+                for (let m = 0; m < adminMsg.length; m++) {
+                  console.log("Admin Msg: " + JSON.stringify(adminMsg[m]));
+                  if (adminMsg[m].customer) {
+                    adminCust.push(adminMsg[m]);
+                  }
+                  if (adminMsg[m].property) {
+                    adminProp.push(adminMsg[m]);
+                  }
+                  if (adminMsg[m].area) {
+                    adminArea.push(adminMsg[m]);
+                  }
+                }
+                let adminPush = {
+                  "customers": adminCust,
+                  "properties": adminProp,
+                  "areas": adminArea
+                }
+                await postQueue(adminPush)
               }
-              const areaRep = await processAreas();
-              if (areaRep.result) {
-                console.log("Areas Processed Successfully");
-              } else {
-
+              } catch (err) {
+                console.log("Failed to process Admin Requests: " + err.message);
+                const errJSON = {
+                  "process": "ScheduledAdminRequest",
+                  "error": "Failed to process Admin Requests: " + err.message,
+                  "data": {}
+                }
+                const err_res = await putError(errJSON, 'resisure_dashboard_api', errJSON.error, 0);
               }
+              // await waitMs(2000); //wait 2 seconds before processing devices to allow for property creation if needed
+              // //process device admin requests
+              // const devRep = await processDevices();
+              // if (devRep.result) {
+              //   console.log("Devices Processed Successfully");
+              // } else {
 
-              await waitMs(2000); //wait 2 seconds before processing properties to allow for customer and area creation if needed
-              //process properties admin requests
-              const propRep = await processProperties();
-              if (propRep.result) {
-                console.log("Properties Processed Successfully");
-              } else {
-
-              }
-              await waitMs(2000); //wait 2 seconds before processing devices to allow for property creation if needed
-              //process device admin requests
-              const devRep = await processDevices();
-              if (devRep.result) {
-                console.log("Devices Processed Successfully");
-              } else {
-
-              }
+              // }
 
 
               break;
