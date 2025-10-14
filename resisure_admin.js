@@ -45,8 +45,8 @@ import * as amqp from 'amqplib';
 import { parse } from "path";
 
 //get the API data
-const api_auth=process.env.AUTH_TOKEN;
-const api_email=process.env.AUTH_EMAIL;
+const api_auth = process.env.AUTH_TOKEN;
+const api_email = process.env.AUTH_EMAIL;
 
 //HTTP
 import * as https from 'https';
@@ -64,7 +64,7 @@ const amqp_exchange = 'amq.topic';
 let messageChannel;
 
 //post error to poison queue
-const putError =(data = {}, service = "", error = "", error_code = 0) =>{
+const putError = (data = {}, service = "", error = "", error_code = 0) => {
   return new Promise((resolve) => {
     console.log("ERROR - data=" + JSON.stringify(data) + ",service=" + service + ",error=" + error + ",error code=" + error_code);
     if (service) {
@@ -88,7 +88,7 @@ const putError =(data = {}, service = "", error = "", error_code = 0) =>{
 
 
 //Post a JSON message to a queue
-const postQueue = (msgJSON) =>{
+const postQueue = (msgJSON) => {
   return new Promise((resolve) => {
     //put message on data insert queue
     (async () => {
@@ -135,267 +135,273 @@ const postQueue = (msgJSON) =>{
 const processCustomer = (customers, type, client, status, errStatus) => {
   return new Promise((resolve) => {
     (async () => {
-            let errMsg = {};
-            let ret = {
-              "result": true
-            };
-            console.log("Processing a " + type + " request for processing customers");
-              if (type === "manual") {
-              //manual message
-              for (let i in customers) {
-                const customer = customers[i];
-                let statusMsg = {
-                    "dashboard": "customers",
-                    "customer" : customer.customer,
-                    "action": customer.action,
-                    "customer_id": customer.customer_id,
-                    "customer_ref": customer.customer_ref,
-                    "customer_name": customer.customer_name,
-                    "email": customer.email,
-                    "contact_name": customer.customer_contact,
-                    "summary_reports": customer.summary_reports,
-                    "property_reports": customer.property_reports,
-                    "report_output": customer.report_output,
-                  }
+      let errMsg = {};
+      let ret = {
+        "result": true
+      };
+      console.log("Processing a " + type + " request for processing customers");
+      if (type === "manual") {
+        //manual message
+        for (let i in customers) {
+          const customer = customers[i];
+          let statusMsg = {
+            "dashboard": "customers",
+            "customer": customer.customer,
+            "action": customer.action,
+            "customer_id": customer.customer_id,
+            "customer_ref": customer.customer_ref,
+            "customer_name": customer.customer_name,
+            "email": customer.email,
+            "contact_name": customer.customer_contact,
+            "summary_reports": customer.summary_reports,
+            "property_reports": customer.property_reports,
+            "report_output": customer.report_output,
+          }
 
-                  //check the action type
-                  //this should add a new customer and amend or deactivate an existing customer
-                  //customer_id is only required for amend and deactivate actions
-                  //if inputted for adding it will ignore it as the database will auto-generate it
-                  try {
-                  if (customer.action === "new") {
-                    console.log("Adding Customer: " + customer.customer_ref);
-                    //insert the customer into the database
-                    let dateAdded = new Date()
-                    const res = await client.query('INSERT INTO customers (customer_ref, customer_name, customer_email, date_added, customer_contact, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING customer_id', [customer.customer_ref, customer.customer_name, customer.email, dateAdded, customer.customer_contact, 1]);
-                    console.log("Customer Inserted: " + res.rows[0].customer_id)
-                    const sRep = await client.query('INSERT INTO customer_reports (customer_id, report_structure_property_id, report_output, status, summary_report) VALUES ($1, $2, $3, $4, $5) RETURNING customer_reports_id', [res.rows[0].customer_id, customer.property_reports, customer.report_output, 1 , customer.summary_reports]);
-                    
-                    statusMsg.status = 1; 
-                    statusMsg.date_added = customer.datetime;
-                    
-                    //console.log("Customer Reports Inserted: " + sRep.rows[0].customer_reports_id + ", " + pRep.rows[0].customer_reports_id)
-                    //set the status message
-                    statusMsg.customer_id = res.rows[0].customer_id;
-                    status.push(statusMsg);
-                    
-                    console.log("Status Message Posted: " + JSON.stringify(statusMsg));
+          //check the action type
+          //this should add a new customer and amend or deactivate an existing customer
+          //customer_id is only required for amend and deactivate actions
+          //if inputted for adding it will ignore it as the database will auto-generate it
+          try {
+            if (customer.action === "new") {
+              console.log("Adding Customer: " + customer.customer_ref);
+              //insert the customer into the database
+              let dateAdded = new Date()
+              const res = await client.query('INSERT INTO customers (customer_ref, customer_name, customer_email, date_added, customer_contact, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING customer_id', [customer.customer_ref, customer.customer_name, customer.email, dateAdded, customer.customer_contact, 1]);
+              console.log("Customer Inserted: " + res.rows[0].customer_id)
+              const sRep = await client.query('INSERT INTO customer_reports (customer_id, report_structure_property_id, report_output, status, summary_report) VALUES ($1, $2, $3, $4, $5) RETURNING customer_reports_id', [res.rows[0].customer_id, customer.property_reports, customer.report_output, 1, customer.summary_reports]);
 
-                  } else if (customer.action === "amend") {
-                    console.log("Updating Customer: " + customer.customer_id);
+              statusMsg.status = 1;
+              statusMsg.date_added = customer.datetime;
 
-                    //update the customer in the database
+              //console.log("Customer Reports Inserted: " + sRep.rows[0].customer_reports_id + ", " + pRep.rows[0].customer_reports_id)
+              //set the status message
+              statusMsg.customer_id = res.rows[0].customer_id;
+              status.push(statusMsg);
 
-                    let dateUpdated = new Date()
-                    const res = await client.query('UPDATE customers set customer_ref = $1, customer_name = $2, customer_email = $3, date_updated = $5, customer_contact = $6, status = $7 WHERE customer_id = $4 RETURNING customer_id', [customer.customer_ref, customer.customer_name, customer.email, customer.customer_id, dateUpdated, customer.customer_contact, 1])
-                    console.log("Customer Updated: " + res.rows[0].customer_id)
-                    const sRep = await client.query('UPDATE customer_reports set report_structure_property_id = $2, summary_report = $3, report_output = $4 WHERE customer_id = $1 RETURNING customer_reports_id', [customer.customer_id, customer.property_reports ,customer.summary_reports, customer.report_output]);
+              console.log("Status Message Posted: " + JSON.stringify(statusMsg));
 
-                    statusMsg.status = 1; //set status to 1 for amended customers
-                    statusMsg.date_updated = customer.datetime;
+            } else if (customer.action === "amend") {
+              console.log("Updating Customer: " + customer.customer_id);
 
-                    //console.log("Customer Reports Updated: " + sRep.rows[0].customer_reports_id + ", " + pRep.rows[0].customer_reports_id)
-                    //set the status message
+              //update the customer in the database
 
-                    statusMsg.customer_id = res.rows[0].customer_id;
-                    status.push(statusMsg);
-                    
-                    console.log("Status Message Posted: " + JSON.stringify(statusMsg));
+              let dateUpdated = new Date()
+              const res = await client.query('UPDATE customers set customer_ref = $1, customer_name = $2, customer_email = $3, date_updated = $5, customer_contact = $6, status = $7 WHERE customer_id = $4 RETURNING customer_id', [customer.customer_ref, customer.customer_name, customer.email, customer.customer_id, dateUpdated, customer.customer_contact, 1])
+              console.log("Customer Updated: " + res.rows[0].customer_id)
+              const sRep = await client.query('UPDATE customer_reports set report_structure_property_id = $2, summary_report = $3, report_output = $4 WHERE customer_id = $1 RETURNING customer_reports_id', [customer.customer_id, customer.property_reports, customer.summary_reports, customer.report_output]);
 
-                  //deactivate the customer
-                  } else if (customer.action === "deactivate") {
-                    console.log("Deactivating Customer: " + customer.customer_id);
-                    //deactivate the customer in the database
-                    const res = await client.query('UPDATE customers set status = 0 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]);
-                    const rep = await client.query('UPDATE customer_reports set status = 0 WHERE customer_id = $1', [customer.customer_id]);
-                    console.log("Customer Deactivated: " + res.rows[0].customer_id)
+              statusMsg.status = 1; //set status to 1 for amended customers
+              statusMsg.date_updated = customer.datetime;
 
-                    //set the status message
-                    statusMsg.customer_id = res.rows[0].customer_id;
-                    statusMsg.status = 0; //set status to 0 for deactivated customers
-                    statusMsg.date_updated = customer.datetime;
-                    status.push(statusMsg);
-                  } else if (customer.action === "reactivate") {
-                    console.log("Reactivating Customer: " + customer.customer_id);
-                    //reactivate the customer in the database
-                    const res = await client.query('UPDATE customers set status = 1 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]);
-                    const rep = await client.query('UPDATE customer_reports set status = 1 WHERE customer_id = $1', [customer.customer_id]);
-                    console.log("Customer Reactivated: " + res.rows[0].customer_id)
-                    //set the status message
-                    statusMsg.customer_id = res.rows[0].customer_id;
-                    statusMsg.status = 1; //set status to 1 for reactivated customers
-                    statusMsg.date_updated = customer.datetime;
-                    status.push(statusMsg);
-                  }
-                  
-                  else if (customer.action === "dbToZohoUpdate") {
-                    console.log("Updating Customer in Zoho: " + customer.customer_id);
-                    statusMsg.error = customer.error;
-                    //update the customer in Zoho
-                    status.push(statusMsg);
-                    // action already checked in dashboard api
-                  }
-                  else {
+              //console.log("Customer Reports Updated: " + sRep.rows[0].customer_reports_id + ", " + pRep.rows[0].customer_reports_id)
+              //set the status message
 
-                  }
-                } catch (err) {
-                  console.log("Failed to process customer: " + err.message);
-                  const errJSON = {
-                    "process": "CustomerDatabaseInsert",
-                    "error": "Failed to process customer: " + err.message,
-                    "data": customer
-                  }
-                  await putError(errJSON, 'resisure_admin', errJSON.error, 0);
-                  errMsg = statusMsg;
-                  errMsg.error = err.message;
-                  errMsg.status = 99;
-                  errStatus.push(errMsg);
-                  ret.result = false;
-                };
-              }
-              resolve(ret);
-            } 
-        })();
+              statusMsg.customer_id = res.rows[0].customer_id;
+              status.push(statusMsg);
+
+              console.log("Status Message Posted: " + JSON.stringify(statusMsg));
+
+              //deactivate the customer
+            } else if (customer.action === "deactivate") {
+              console.log("Deactivating Customer: " + customer.customer_id);
+              //deactivate the customer in the database
+              const res = await client.query('UPDATE customers set status = 0 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]);
+              const rep = await client.query('UPDATE customer_reports set status = 0 WHERE customer_id = $1', [customer.customer_id]);
+              console.log("Customer Deactivated: " + res.rows[0].customer_id)
+
+              //set the status message
+              statusMsg.customer_id = res.rows[0].customer_id;
+              statusMsg.status = 0; //set status to 0 for deactivated customers
+              statusMsg.date_updated = customer.datetime;
+              status.push(statusMsg);
+            } else if (customer.action === "reactivate") {
+              console.log("Reactivating Customer: " + customer.customer_id);
+              //reactivate the customer in the database
+              const res = await client.query('UPDATE customers set status = 1 WHERE customer_id = $1 RETURNING customer_id', [customer.customer_id]);
+              const rep = await client.query('UPDATE customer_reports set status = 1 WHERE customer_id = $1', [customer.customer_id]);
+              console.log("Customer Reactivated: " + res.rows[0].customer_id)
+              //set the status message
+              statusMsg.customer_id = res.rows[0].customer_id;
+              statusMsg.status = 1; //set status to 1 for reactivated customers
+              statusMsg.date_updated = customer.datetime;
+              status.push(statusMsg);
+            }
+
+            else if (customer.action === "dbToZohoUpdate") {
+              console.log("Updating Customer in Zoho: " + customer.customer_id);
+              statusMsg.error = customer.error;
+              //update the customer in Zoho
+              status.push(statusMsg);
+              // action already checked in dashboard api
+            }
+            else {
+
+            }
+          } catch (err) {
+            console.log("Failed to process customer: " + err.message);
+            const errJSON = {
+              "process": "CustomerDatabaseInsert",
+              "error": "Failed to process customer: " + err.message,
+              "data": customer
+            }
+            await putError(errJSON, 'resisure_admin', errJSON.error, 0);
+            errMsg = statusMsg;
+            errMsg.error = err.message;
+            errMsg.status = 99;
+            errStatus.push(errMsg);
+            ret.result = false;
+          };
+        }
+        resolve(ret);
+      }
+    })();
   });
 }
 
 const processProperty = (properties, type, client, status, errStatus) => {
   return new Promise((resolve) => {
     (async () => {
-            let statusMsg = {};
-            let errMsg = {};
-            let ret = {
-              "result": true
-            };
-              if (type === "manual")
-              {   console.log("Processing a " + type + " request for processing properties");
-              //manual message
-              for (let i in properties) {
-                const property = properties[i];
-                try {
-                  statusMsg = {
-                  "dashboard": "properties",
-                  "property": property.property,
-                  "action": property.action,
-                  "property_id": property.property_id,
-                  "customer_id": property.customer_id,
-                  "property_code": property.property_code,
-                  "status": property.status,
-                  "area_id": property.area_id,
-                  "mould_sensitivity": property.mould_sensitivity,
-                  "mould_index": property.mould_index,
-                  "mould_decline": property.mould_decline,
-                  "flat_number": property.flat_number,
-                  "street_number": property.street_number,
-                  "street_name": property.street,
-                  "town_name": property.town,
-                  "county": property.county,
-                  "city": property.city,
-                  "device_ref": property.device_ref,
-                  "device_id": property.device_id
-                  }
-                if (property.action === "new") {
-                    console.log("Adding property: " + property.property_code);
-                    //insert the property into the database
+      let statusMsg = {};
+      let errMsg = {};
+      let ret = {
+        "result": true
+      };
+      if (type === "manual") {
+        console.log("Processing a " + type + " request for processing properties");
+        //manual message
+        for (let i in properties) {
+          const property = properties[i];
+          try {
+            statusMsg = {
+              "dashboard": "properties",
+              "property": property.property,
+              "action": property.action,
+              "property_id": property.property_id,
+              "customer_id": property.customer_id,
+              "property_code": property.property_code,
+              "status": property.status,
+              "area_id": property.area_id,
+              "mould_sensitivity": property.mould_sensitivity,
+              "mould_index": property.mould_index,
+              "mould_decline": property.mould_decline,
+              "flat_number": property.flat_number,
+              "street_number": property.street_number,
+              "street_name": property.street,
+              "town_name": property.town,
+              "county": property.county,
+              "city": property.city,
+              "device_ref": property.device_ref,
+              "device_id": property.device_id
+            }
+            if (property.action === "new") {
+              console.log("Adding property: " + property.property_code);
+              //insert the property into the database
 
-                    let dateAdded = new Date()
-                    const res = await client.query('INSERT INTO properties (customer_id, property_code, date_added, area_id, status, mould_sensitivity, mould_index, mould_decline_coefficient) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING property_id', [property.customer_id, property.property_code, dateAdded, property.area_id, 1, property.mould_sensitivity, property.mould_index, property.mould_decline]);
-                    // console.log("property Inserted: " + res.rows[0].property_id)
-                    const InfoRes = await client.query('INSERT INTO property_info (flat_number, street_number, street, town, property_id, postcode, status, county, city, date_added) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING property_info_id', [property.flat_number, property.street_number, property.street, property.town, res.rows[0].property_id, property.property_code, property.status, property.county, property.city, dateAdded]);
-                    // console.log("Property Info Inserted: " + InfoRes.rows[0].property_info_id)
-                    if (property.device_property_id == 1 && property.device_status === 1) {
-                      const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
-                    } else {
-                      throw new Error("Device must be unassigned from previous property to link to a new property");
-                    }
-                    //set the status message
-                    statusMsg.property_id = res.rows[0].property_id;
-                    statusMsg.status = 1; //default status is 1 for new properties
-                    statusMsg.date_added = dateAdded;
-                    status.push(statusMsg);
-                    console.log("Status Message Posted: " + JSON.stringify(statusMsg));
-
-                  } else if (property.action === "amend") {
-                    console.log("Updating Property: " + property.property_id);
-
-                    //update the property in the database
-                    property.status = parseInt(property.status);
-                    property.customer_id = parseInt(property.customer_id);
-                    let dateUpdated = new Date()
-                    const res = await client.query('UPDATE properties set customer_id = $2, property_code = $3, area_id = $4, date_updated = $5, status = $6, mould_sensitivity = $7, mould_index = $8, mould_decline_coefficient = $9 WHERE property_id = $1 RETURNING property_id', [property.property_id, property.customer_id, property.property_code, property.area_id, dateUpdated, property.status, property.mould_sensitivity, property.mould_index, property.mould_decline])
-                    console.log("Property Updated: " + res.rows[0].property_id)
-                    const InfoRes = await client.query('UPDATE property_info set flat_number = $2, street_number = $3, street = $4, town = $5, postcode = $6, county = $7, city = $8 WHERE property_id = $1 RETURNING property_info_id', [property.property_id, property.flat_number, property.street_number, property.street, property.town, property.property_code, property.county, property.city]);
-                    if (property.device_property_id == 1 && property.device_status === 1) {
-                      const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
-                    } else {
-                      throw new Error("Device must be unassigned from previous property to link to a new property");
-                    }
-                    //set the status message
-                    statusMsg.date_updated = dateUpdated;
-                    statusMsg.status = 1; //set status to 1 for amended properties
-                    status.push(statusMsg);
-                    console.log("Status Message Posted: " + JSON.stringify(statusMsg));
-
-                  //deactivate the property
-                  } else if (property.action === "deactivate") {
-                    console.log("Deactivating Property: " + property.property_id);
-                    //deactivate the property in the database
-                    property.property_id = parseInt(property.property_id);
-                    const res = await client.query('UPDATE properties set status = 0 WHERE property_id = $1 RETURNING property_id', [property.property_id]);
-                    const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [1, property.device_id, 2])
-
-
-                    console.log("Property Deactivated: " + res.rows[0].property_id)
-                    //set the status message
-                    statusMsg.status = 0; //set status to 0 for deactivated properties
-                    let dateUpdated = new Date()
-                    statusMsg.date_updated = dateUpdated;
-                    statusMsg.device_ref = ""
-                    status.push(statusMsg);
-                    console.log("Status Message Posted: " + JSON.stringify(statusMsg));
-                  } else if (property.action === "reactivate") {
-                    console.log("Reactivating property: " + property.property_id);
-                    //reactivate the property in the database
-
-                    const res = await client.query('UPDATE properties set status = 1 WHERE property_id = $1 RETURNING customer_id', [property.property_id]);
-                    if (property.device_property_id == 1 && property.device_status === 1) {
-                      const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
-                    } else {
-                      throw new Error("Device must be unassigned from previous property to link to a new property");
-                    }
-                    console.log("Property Reactivated: " + res.rows[0].property_id)
-
-                    //set the status message
-                    errMsg.property_id = res.rows[0].property_id;
-                    statusMsg.status = 1; //set status to 1 for reactivated properties
-                    statusMsg.date_updated = property.datetime;
-                    status.push(statusMsg);
-                  }
-                  
-
-                  else {
-                  }
-                }
-                catch (err) {
-                  console.log("Failed to process property: " + err.message);
-                  const errJSON = {
-                    "process": "PropertyDatabaseInsert",
-                    "error": "Failed to process property: " + err.message,
-                    "data": property
-                  }
-                  await putError(errJSON, 'resisure_admin', errJSON.error, 0);
-                  errMsg = statusMsg;
-                  errMsg.error = err.message;
-                  errMsg.status = 99;
-                  errStatus.push(errMsg);
-                  ret.result = false;
-                }
+              let dateAdded = new Date()
+              const res = await client.query('INSERT INTO properties (customer_id, property_code, date_added, area_id, status, mould_sensitivity, mould_index, mould_decline_coefficient) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING property_id', [property.customer_id, property.property_code, dateAdded, property.area_id, 1, property.mould_sensitivity, property.mould_index, property.mould_decline]);
+              // console.log("property Inserted: " + res.rows[0].property_id)
+              const InfoRes = await client.query('INSERT INTO property_info (flat_number, street_number, street, town, property_id, postcode, status, county, city, date_added) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING property_info_id', [property.flat_number, property.street_number, property.street, property.town, res.rows[0].property_id, property.property_code, property.status, property.county, property.city, dateAdded]);
+              // console.log("Property Info Inserted: " + InfoRes.rows[0].property_info_id)
+              if (property.device_id) {
+                if (property.device_property_id == 1 && property.device_status === 1) {
+                  const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
+                } else {
+                  throw new Error("Device must be unassigned from previous property to link to a new property");
                 }
               }
-            else {
+              //set the status message
+              statusMsg.property_id = res.rows[0].property_id;
+              statusMsg.status = 1; //default status is 1 for new properties
+              statusMsg.date_added = dateAdded;
+              status.push(statusMsg);
+              console.log("Status Message Posted: " + JSON.stringify(statusMsg));
 
+            } else if (property.action === "amend") {
+              console.log("Updating Property: " + property.property_id);
+
+              //update the property in the database
+              property.status = parseInt(property.status);
+              property.customer_id = parseInt(property.customer_id);
+              let dateUpdated = new Date()
+              const res = await client.query('UPDATE properties set customer_id = $2, property_code = $3, area_id = $4, date_updated = $5, status = $6, mould_sensitivity = $7, mould_index = $8, mould_decline_coefficient = $9 WHERE property_id = $1 RETURNING property_id', [property.property_id, property.customer_id, property.property_code, property.area_id, dateUpdated, property.status, property.mould_sensitivity, property.mould_index, property.mould_decline])
+              console.log("Property Updated: " + res.rows[0].property_id)
+              const InfoRes = await client.query('UPDATE property_info set flat_number = $2, street_number = $3, street = $4, town = $5, postcode = $6, county = $7, city = $8 WHERE property_id = $1 RETURNING property_info_id', [property.property_id, property.flat_number, property.street_number, property.street, property.town, property.property_code, property.county, property.city]);
+              if (property.device_id) {
+                if (property.device_property_id == 1 && property.device_status === 1) {
+                  const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
+                } else {
+                  throw new Error("Device must be unassigned from previous property to link to a new property");
+                }
+              }
+              //set the status message
+              statusMsg.date_updated = dateUpdated;
+              statusMsg.status = 1; //set status to 1 for amended properties
+              status.push(statusMsg);
+              console.log("Status Message Posted: " + JSON.stringify(statusMsg));
+
+              //deactivate the property
+            } else if (property.action === "deactivate") {
+              console.log("Deactivating Property: " + property.property_id);
+              //deactivate the property in the database
+              property.property_id = parseInt(property.property_id);
+              const res = await client.query('UPDATE properties set status = 0 WHERE property_id = $1 RETURNING property_id', [property.property_id]);
+              const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [1, property.device_id, 2])
+
+
+              console.log("Property Deactivated: " + res.rows[0].property_id)
+              //set the status message
+              statusMsg.status = 0; //set status to 0 for deactivated properties
+              let dateUpdated = new Date()
+              statusMsg.date_updated = dateUpdated;
+              statusMsg.device_ref = ""
+              status.push(statusMsg);
+              console.log("Status Message Posted: " + JSON.stringify(statusMsg));
+            } else if (property.action === "reactivate") {
+              console.log("Reactivating property: " + property.property_id);
+              //reactivate the property in the database
+
+              const res = await client.query('UPDATE properties set status = 1 WHERE property_id = $1 RETURNING customer_id', [property.property_id]);
+              if (property.device_id) {
+                if (property.device_property_id == 1 && property.device_status === 1) {
+                  const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
+                } else {
+                  throw new Error("Device must be unassigned from previous property to link to a new property");
+                }
+              }
+              console.log("Property Reactivated: " + res.rows[0].property_id)
+
+              //set the status message
+              errMsg.property_id = res.rows[0].property_id;
+              statusMsg.status = 1; //set status to 1 for reactivated properties
+              statusMsg.date_updated = property.datetime;
+              status.push(statusMsg);
             }
-            resolve(ret);
+
+
+            else {
+            }
+          }
+          catch (err) {
+            console.log("Failed to process property: " + err.message);
+            const errJSON = {
+              "process": "PropertyDatabaseInsert",
+              "error": "Failed to process property: " + err.message,
+              "data": property
+            }
+            await putError(errJSON, 'resisure_admin', errJSON.error, 0);
+            errMsg = statusMsg;
+            errMsg.error = err.message;
+            errMsg.status = 99;
+            errStatus.push(errMsg);
+            ret.result = false;
+          }
+        }
+      }
+      else {
+
+      }
+      resolve(ret);
     })();
   });
 }
@@ -408,22 +414,22 @@ const processArea = (areas, type, client, status, errStatus) => {
       let ret = {
         "result": true
       };
-      if (type === "manual"){
+      if (type === "manual") {
         console.log("Processing a " + type + " request for processing areas");
         //manual message
         for (let i in areas) {
           const area = areas[i];
           try {
             statusMsg = {
-            "dashboard": "areas",
-            "area": area.area,
-            "action": area.action,
-            "area_id": area.area_id,
-            "area_code": area.area_code,
-            "area_city": area.area_city,
-            "area_county": area.area_county,
+              "dashboard": "areas",
+              "area": area.area,
+              "action": area.action,
+              "area_id": area.area_id,
+              "area_code": area.area_code,
+              "area_city": area.area_city,
+              "area_county": area.area_county,
             }
-          if (area.action === "new") {
+            if (area.action === "new") {
               console.log("Adding area: " + area.area_code);
               //insert the area into the database
               let dateAdded = new Date()
@@ -434,7 +440,7 @@ const processArea = (areas, type, client, status, errStatus) => {
               statusMsg.area_id = res.rows[0].area_id;
               status.push(statusMsg);
 
-          } else if (area.action === "amend") {
+            } else if (area.action === "amend") {
               console.log("Updating Area: " + area.area_id);
               //update the area in the database
               const res = await client.query('UPDATE areas set area_code = $2, area_city = $3, area_county = $4 WHERE area_id = $1 RETURNING area_id', [area.area_id, area.area_code, area.area_city, area.area_county])
@@ -442,32 +448,32 @@ const processArea = (areas, type, client, status, errStatus) => {
               //set the status message
               statusMsg.area_id = res.rows[0].area_id;
               status.push(statusMsg);
-          } else {
-            // action already checked in dashboard api
-          }
+            } else {
+              // action already checked in dashboard api
+            }
 
-        } catch (err) {
-          console.log("Failed to process Area: " + err.message);
-          const errJSON = {
-            "process": "AreaDatabaseInsert",
-            "error": "Failed to process Area: " + err.message,
-            "data": area
+          } catch (err) {
+            console.log("Failed to process Area: " + err.message);
+            const errJSON = {
+              "process": "AreaDatabaseInsert",
+              "error": "Failed to process Area: " + err.message,
+              "data": area
+            }
+            await putError(errJSON, 'resisure_admin', errJSON.error, 0);
+            errMsg = statusMsg;
+            errMsg.status = 99;
+            errMsg.error = err.message;
+            errStatus.push(errMsg);
+            ret.result = false;
           }
-          await putError(errJSON, 'resisure_admin', errJSON.error, 0);
-          errMsg = statusMsg;
-          errMsg.status = 99;
-          errMsg.error = err.message;
-          errStatus.push(errMsg);
-          ret.result = false;
-        }
         }
       }
-    else {
+      else {
 
-    }
-    resolve(ret);
-  })();
-});
+      }
+      resolve(ret);
+    })();
+  });
 }
 //Connect to the message broker
 
@@ -479,20 +485,20 @@ const processDevices = (devices, type, client, status, errStatus) => {
       let ret = {
         "result": true
       };
-      if (type === "manual"){
+      if (type === "manual") {
         console.log("Processing a " + type + " request for processing devices");
         //manual message
         for (let i in devices) {
           const device = devices[i];
           try {
             statusMsg = {
-            "dashboard": "devices",
-            "device": device.device,
-            "action": device.action,
-            "device_id": device.device_id,
-            "property_id": device.property_id,
+              "dashboard": "devices",
+              "device": device.device,
+              "action": device.action,
+              "device_id": device.device_id,
+              "property_id": device.property_id,
             }
-          if (device.action === "Edit") {
+            if (device.action === "Edit") {
               console.log("Editing Device: " + device.device_id);
               //insert the area into the database
               const res = await client.query('UPDATE devices set property_id = $1 WHERE device_id = $2 RETURNING device_id', [device.property_id, device.device_id]);
@@ -500,28 +506,28 @@ const processDevices = (devices, type, client, status, errStatus) => {
               //set the status message
               status.push(statusMsg);
 
-          } else {
-            // action already checked in dashboard api
-          }
+            } else {
+              // action already checked in dashboard api
+            }
 
-        } catch (err) {
-          console.log("Failed to process Area: " + err.message);
-          const errJSON = {
-            "process": "DevicesDatabaseInsert",
-            "error": "Failed to process Device: " + err.message,
-            "data": device
+          } catch (err) {
+            console.log("Failed to process Area: " + err.message);
+            const errJSON = {
+              "process": "DevicesDatabaseInsert",
+              "error": "Failed to process Device: " + err.message,
+              "data": device
+            }
+            await putError(errJSON, 'resisure_admin', errJSON.error, 0);
+            errMsg = statusMsg;
+            errMsg.error = err.message;
+            errStatus.push(errMsg);
+            ret.result = false;
           }
-          await putError(errJSON, 'resisure_admin', errJSON.error, 0);
-          errMsg = statusMsg;
-          errMsg.error = err.message;
-          errStatus.push(errMsg);
-          ret.result = false;
-        }
         }
       }
-    else {
+      else {
 
-    }
+      }
       resolve(ret);
     })();
   }
@@ -615,7 +621,7 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
           //determine if the action is new, amend or deactivate
           //determine if the message is a manual or automatic message
           const client = await pool.connect();
-          
+
           await client.query('BEGIN');
 
           let allStatus = [], errStatus = [];
@@ -626,7 +632,7 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
           if (custRet.result && areaRet.result && propRet.result) {
             await client.query('COMMIT');
             console.log("All data processed successfully");
-            if (allStatus.length > 0){
+            if (allStatus.length > 0) {
               const groupedStatus = {
                 customers: allStatus.filter(s => s.dashboard === "customers"),
                 properties: allStatus.filter(s => s.dashboard === "properties"),
@@ -639,18 +645,18 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
             await client.query('ROLLBACK');
             console.log("There were errors processing the data, please check the error log");
             const groupedErrorStatus = {
-                customers: errStatus.filter(s => s.dashboard === "customers"),
-                properties: errStatus.filter(s => s.dashboard === "properties"),
-                areas: errStatus.filter(s => s.dashboard === "areas"),
-              }
-            await postQueue(groupedErrorStatus);
+              customers: errStatus.filter(s => s.dashboard === "customers"),
+              properties: errStatus.filter(s => s.dashboard === "properties"),
+              areas: errStatus.filter(s => s.dashboard === "areas"),
             }
+            await postQueue(groupedErrorStatus);
+          }
           //release the client back to the pool
           client.release();
-          
-            messageChannel.ack(amqpEncodedMessage);
 
-          } catch (err) {
+          messageChannel.ack(amqpEncodedMessage);
+
+        } catch (err) {
           console.log('Failed to process Property: ' + err.message);
           //log error
           const errJSON = {
