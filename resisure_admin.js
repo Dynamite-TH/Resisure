@@ -248,7 +248,7 @@ const processCustomer = (customers, type, client, status, errStatus) => {
                   await putError(errJSON, 'resisure_admin', errJSON.error, 0);
                   errMsg = statusMsg;
                   errMsg.error = err.message;
-                  errMsg.status = 2;
+                  errMsg.status = 99;
                   errStatus.push(errMsg);
                   ret.result = false;
                 };
@@ -290,7 +290,9 @@ const processProperty = (properties, type, client, status, errStatus) => {
                   "street_name": property.street,
                   "town_name": property.town,
                   "county": property.county,
-                  "city": property.city
+                  "city": property.city,
+                  "device_ref": property.device_ref,
+                  "device_id": property.device_id
                   }
                 if (property.action === "new") {
                     console.log("Adding property: " + property.property_code);
@@ -298,9 +300,14 @@ const processProperty = (properties, type, client, status, errStatus) => {
 
                     let dateAdded = new Date()
                     const res = await client.query('INSERT INTO properties (customer_id, property_code, date_added, area_id, status, mould_sensitivity, mould_index, mould_decline_coefficient) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING property_id', [property.customer_id, property.property_code, dateAdded, property.area_id, 1, property.mould_sensitivity, property.mould_index, property.mould_decline]);
-                    console.log("property Inserted: " + res.rows[0].property_id)
+                    // console.log("property Inserted: " + res.rows[0].property_id)
                     const InfoRes = await client.query('INSERT INTO property_info (flat_number, street_number, street, town, property_id, postcode, status, county, city, date_added) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING property_info_id', [property.flat_number, property.street_number, property.street, property.town, res.rows[0].property_id, property.property_code, property.status, property.county, property.city, dateAdded]);
-                    console.log("Property Info Inserted: " + InfoRes.rows[0].property_info_id)
+                    // console.log("Property Info Inserted: " + InfoRes.rows[0].property_info_id)
+                    if (property.device_property_id == 1 && property.device_status === 1) {
+                      const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
+                    } else {
+                      throw new Error("Device must be unassigned from previous property to link to a new property");
+                    }
                     //set the status message
                     statusMsg.property_id = res.rows[0].property_id;
                     statusMsg.status = 1; //default status is 1 for new properties
@@ -318,6 +325,11 @@ const processProperty = (properties, type, client, status, errStatus) => {
                     const res = await client.query('UPDATE properties set customer_id = $2, property_code = $3, area_id = $4, date_updated = $5, status = $6, mould_sensitivity = $7, mould_index = $8, mould_decline_coefficient = $9 WHERE property_id = $1 RETURNING property_id', [property.property_id, property.customer_id, property.property_code, property.area_id, dateUpdated, property.status, property.mould_sensitivity, property.mould_index, property.mould_decline])
                     console.log("Property Updated: " + res.rows[0].property_id)
                     const InfoRes = await client.query('UPDATE property_info set flat_number = $2, street_number = $3, street = $4, town = $5, postcode = $6, county = $7, city = $8 WHERE property_id = $1 RETURNING property_info_id', [property.property_id, property.flat_number, property.street_number, property.street, property.town, property.property_code, property.county, property.city]);
+                    if (property.device_property_id == 1 && property.device_status === 1) {
+                      const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
+                    } else {
+                      throw new Error("Device must be unassigned from previous property to link to a new property");
+                    }
                     //set the status message
                     statusMsg.date_updated = dateUpdated;
                     statusMsg.status = 1; //set status to 1 for amended properties
@@ -330,7 +342,7 @@ const processProperty = (properties, type, client, status, errStatus) => {
                     //deactivate the property in the database
                     property.property_id = parseInt(property.property_id);
                     const res = await client.query('UPDATE properties set status = 0 WHERE property_id = $1 RETURNING property_id', [property.property_id]);
-                    
+                    const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [1, property.device_id, 2])
 
 
                     console.log("Property Deactivated: " + res.rows[0].property_id)
@@ -338,14 +350,19 @@ const processProperty = (properties, type, client, status, errStatus) => {
                     statusMsg.status = 0; //set status to 0 for deactivated properties
                     let dateUpdated = new Date()
                     statusMsg.date_updated = dateUpdated;
+                    statusMsg.device_ref = ""
                     status.push(statusMsg);
                     console.log("Status Message Posted: " + JSON.stringify(statusMsg));
                   } else if (property.action === "reactivate") {
                     console.log("Reactivating property: " + property.property_id);
                     //reactivate the property in the database
 
-                    const res = await client.query('UPDATE properties set status = 1 WHERE property_id = $1 RETURNING customer_id', [property.property_id]
-                    );
+                    const res = await client.query('UPDATE properties set status = 1 WHERE property_id = $1 RETURNING customer_id', [property.property_id]);
+                    if (property.device_property_id == 1 && property.device_status === 1) {
+                      const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
+                    } else {
+                      throw new Error("Device must be unassigned from previous property to link to a new property");
+                    }
                     console.log("Property Reactivated: " + res.rows[0].property_id)
 
                     //set the status message
@@ -369,7 +386,7 @@ const processProperty = (properties, type, client, status, errStatus) => {
                   await putError(errJSON, 'resisure_admin', errJSON.error, 0);
                   errMsg = statusMsg;
                   errMsg.error = err.message;
-                  errMsg.status = 2;
+                  errMsg.status = 99;
                   errStatus.push(errMsg);
                   ret.result = false;
                 }
@@ -438,7 +455,7 @@ const processArea = (areas, type, client, status, errStatus) => {
           }
           await putError(errJSON, 'resisure_admin', errJSON.error, 0);
           errMsg = statusMsg;
-          errMsg.status = 2;
+          errMsg.status = 99;
           errMsg.error = err.message;
           errStatus.push(errMsg);
           ret.result = false;
@@ -565,7 +582,32 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
           "property_reports": property_reports,
           "date_updated": date_updated,
           "status": cStatus},
-        ]} 
+        ]
+          "properties" : [
+          { "action" : "<new or amend or deactivate>" ,
+          "property_id": property_id,
+          "customer_id": customer_id,
+          "property_code": property_code,
+          "status": pStatus,
+          "area_id": area_id,
+          "mould_sensitivity": mould_sensitivity,
+          "mould_index": mould_index,
+          "mould_decline": mould_decline,
+          "flat_number": flat_number,
+          "street_number": street_number,
+          "street": street,
+          "town": town,
+          "county": county,
+          "city": city,
+          "date_updated": date_updated
+          ],
+          "areas" : [
+          { "action" : "<new or amend>" ,
+           "area_id": area_id,
+           "area_code": area_code,
+           "area_city": area_city,
+           "area_county": area_county
+          }] 
           The message should be in the following format for an scheduled message:
           { TO DO: make a format and process for schedualed messages }
         */
@@ -580,17 +622,28 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
           const custRet = await processCustomer(messageJSON.customers, messageJSON.type, client, allStatus, errStatus);
           const areaRet = await processArea(messageJSON.areas, messageJSON.type, client, allStatus, errStatus);
           const propRet = await processProperty(messageJSON.properties, messageJSON.type, client, allStatus, errStatus);
-          const devRet = await processDevices(messageJSON.devices, messageJSON.type, client, allStatus, errStatus);
-          if (custRet.result && areaRet.result && propRet.result && devRet.result) {
+          // const devRet = await processDevices(messageJSON.devices, messageJSON.type, client, allStatus, errStatus);
+          if (custRet.result && areaRet.result && propRet.result) {
             await client.query('COMMIT');
             console.log("All data processed successfully");
             if (allStatus.length > 0){
-              await postQueue(allStatus);
+              const groupedStatus = {
+                customers: allStatus.filter(s => s.dashboard === "customers"),
+                properties: allStatus.filter(s => s.dashboard === "properties"),
+                areas: allStatus.filter(s => s.dashboard === "areas"),
+              }
+              console.log("Grouped Status: " + JSON.stringify(groupedStatus));
+              await postQueue(groupedStatus);
             }
           } else {
             await client.query('ROLLBACK');
             console.log("There were errors processing the data, please check the error log");
-            await postQueue(errStatus);
+            const groupedErrorStatus = {
+                customers: errStatus.filter(s => s.dashboard === "customers"),
+                properties: errStatus.filter(s => s.dashboard === "properties"),
+                areas: errStatus.filter(s => s.dashboard === "areas"),
+              }
+            await postQueue(groupedErrorStatus);
             }
           //release the client back to the pool
           client.release();
