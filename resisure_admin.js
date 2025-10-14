@@ -130,11 +130,12 @@ const postQueue = (msgJSON) =>{
   });
 }
 
-const processCustomer = (customers, type, client) => {
+
+
+const processCustomer = (customers, type, client, status, errStatus) => {
   return new Promise((resolve) => {
     (async () => {
-      let status = [];
-            let statusMsg = {};
+            let errMsg = {};
             let ret = {
               "result": true
             };
@@ -143,8 +144,7 @@ const processCustomer = (customers, type, client) => {
               //manual message
               for (let i in customers) {
                 const customer = customers[i];
-                try {
-                  statusMsg = {
+                let statusMsg = {
                     "dashboard": "customers",
                     "customer" : customer.customer,
                     "action": customer.action,
@@ -162,6 +162,7 @@ const processCustomer = (customers, type, client) => {
                   //this should add a new customer and amend or deactivate an existing customer
                   //customer_id is only required for amend and deactivate actions
                   //if inputted for adding it will ignore it as the database will auto-generate it
+                  try {
                   if (customer.action === "new") {
                     console.log("Adding Customer: " + customer.customer_ref);
                     //insert the customer into the database
@@ -240,19 +241,17 @@ const processCustomer = (customers, type, client) => {
                 } catch (err) {
                   console.log("Failed to process customer: " + err.message);
                   const errJSON = {
-                    "process": "databaseInsert",
+                    "process": "CustomerDatabaseInsert",
                     "error": "Failed to process customer: " + err.message,
                     "data": customer
                   }
                   await putError(errJSON, 'resisure_admin', errJSON.error, 0);
-                  statusMsg.status = 2;
-                  statusMsg.error = err.message;
-                  status.push(statusMsg);
+                  errMsg = statusMsg;
+                  errMsg.error = err.message;
+                  errMsg.status = 2;
+                  errStatus.push(errMsg);
                   ret.result = false;
                 };
-              }
-              if (status.length > 0){
-              await postQueue(status);
               }
               resolve(ret);
             } 
@@ -260,11 +259,11 @@ const processCustomer = (customers, type, client) => {
   });
 }
 
-const processProperty = (properties, type, client) => {
+const processProperty = (properties, type, client, status, errStatus) => {
   return new Promise((resolve) => {
     (async () => {
-       let status = [];
-              let statusMsg = {};
+            let statusMsg = {};
+            let errMsg = {};
             let ret = {
               "result": true
             };
@@ -350,7 +349,7 @@ const processProperty = (properties, type, client) => {
                     console.log("Property Reactivated: " + res.rows[0].property_id)
 
                     //set the status message
-                    statusMsg.property_id = res.rows[0].property_id;
+                    errMsg.property_id = res.rows[0].property_id;
                     statusMsg.status = 1; //set status to 1 for reactivated properties
                     statusMsg.date_updated = property.datetime;
                     status.push(statusMsg);
@@ -363,20 +362,18 @@ const processProperty = (properties, type, client) => {
                 catch (err) {
                   console.log("Failed to process property: " + err.message);
                   const errJSON = {
-                    "process": "databaseInsert",
+                    "process": "PropertyDatabaseInsert",
                     "error": "Failed to process property: " + err.message,
                     "data": property
                   }
                   await putError(errJSON, 'resisure_admin', errJSON.error, 0);
-                  statusMsg.status = 2;
-                  statusMsg.error = err.message;
-                  status.push(statusMsg);
+                  errMsg = statusMsg;
+                  errMsg.error = err.message;
+                  errMsg.status = 2;
+                  errStatus.push(errMsg);
                   ret.result = false;
                 }
                 }
-                //post status message
-                const dashboard = "properties";
-                await postQueue(status, dashboard);
               }
             else {
 
@@ -386,11 +383,11 @@ const processProperty = (properties, type, client) => {
   });
 }
 
-const processArea = (areas, type, client) => {
+const processArea = (areas, type, client, status, errStatus) => {
   return new Promise((resolve) => {
     (async () => {
-      let status = [];
       let statusMsg = {};
+      let errMsg = {};
       let ret = {
         "result": true
       };
@@ -435,18 +432,18 @@ const processArea = (areas, type, client) => {
         } catch (err) {
           console.log("Failed to process Area: " + err.message);
           const errJSON = {
-            "process": "databaseInsert",
+            "process": "AreaDatabaseInsert",
             "error": "Failed to process Area: " + err.message,
             "data": area
           }
           await putError(errJSON, 'resisure_admin', errJSON.error, 0);
-          statusMsg.error = err.message;
-          status.push(statusMsg);
+          errMsg = statusMsg;
+          errMsg.status = 2;
+          errMsg.error = err.message;
+          errStatus.push(errMsg);
           ret.result = false;
         }
         }
-        //post status message
-        await postQueue(status);
       }
     else {
 
@@ -457,11 +454,11 @@ const processArea = (areas, type, client) => {
 }
 //Connect to the message broker
 
-const processDevices = (devices, type, client) => {
+const processDevices = (devices, type, client, status, errStatus) => {
   return new Promise((resolve) => {
     (async () => {
-      let status = [];
       let statusMsg = {};
+      let errMsg = {};
       let ret = {
         "result": true
       };
@@ -493,18 +490,17 @@ const processDevices = (devices, type, client) => {
         } catch (err) {
           console.log("Failed to process Area: " + err.message);
           const errJSON = {
-            "process": "databaseInsert",
-            "error": "Failed to process Area: " + err.message,
+            "process": "DevicesDatabaseInsert",
+            "error": "Failed to process Device: " + err.message,
             "data": device
           }
           await putError(errJSON, 'resisure_admin', errJSON.error, 0);
-          statusMsg.error = err.message;
-          status.push(statusMsg);
+          errMsg = statusMsg;
+          errMsg.error = err.message;
+          errStatus.push(errMsg);
           ret.result = false;
         }
         }
-        //post status message
-        await postQueue(status);
       }
     else {
 
@@ -579,17 +575,24 @@ const connectMessageBroker = async (reconnectDelay = 500, service = "", message 
           const client = await pool.connect();
           
           await client.query('BEGIN');
-          const custRet = await processCustomer(messageJSON.customers, messageJSON.type, client);
-          const areaRet = await processArea(messageJSON.areas, messageJSON.type, client);
-          const propRet = await processProperty(messageJSON.properties, messageJSON.type, client);
-          const devRet = await processDevices(messageJSON.devices, messageJSON.type, client);
+
+          let allStatus = [], errStatus = [];
+          const custRet = await processCustomer(messageJSON.customers, messageJSON.type, client, allStatus, errStatus);
+          const areaRet = await processArea(messageJSON.areas, messageJSON.type, client, allStatus, errStatus);
+          const propRet = await processProperty(messageJSON.properties, messageJSON.type, client, allStatus, errStatus);
+          const devRet = await processDevices(messageJSON.devices, messageJSON.type, client, allStatus, errStatus);
           if (custRet.result && areaRet.result && propRet.result && devRet.result) {
             await client.query('COMMIT');
             console.log("All data processed successfully");
+            if (allStatus.length > 0){
+              await postQueue(allStatus);
+            }
           } else {
             await client.query('ROLLBACK');
             console.log("There were errors processing the data, please check the error log");
-          }
+            await postQueue(errStatus);
+            }
+          //release the client back to the pool
           client.release();
           
             messageChannel.ack(amqpEncodedMessage);
