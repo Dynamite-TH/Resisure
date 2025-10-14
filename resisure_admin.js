@@ -366,7 +366,7 @@ const processProperty = (properties, type, client, status, errStatus) => {
                 if (property.device_property_id == 1 && property.device_status === 1) {
                   const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
                 } else {
-                  throw new Error("Device must be unassigned from previous property to link to a new property");
+                  throw new Error("Device must be unassigned from previous property to link to a new property/ Must be an active device");
                 }
               }
               console.log("Property Reactivated: " + res.rows[0].property_id)
