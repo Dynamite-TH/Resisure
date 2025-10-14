@@ -177,7 +177,7 @@ const updateCustomerZoho = async (workspace = "", customer = 0, data = {}, dashb
     "authtoken": api_auth,
     "Customer ID" : data.customer_id, //set customer id
     "status" : data.status, //set status
-    "Action to execute": "None", // Default to 'None' after changes are made
+    "Actions": "None", // Default to 'None' after changes are made
     "Date_Updated": formattedDateUpdated,
     "Error message": error,
     "ZOHO_CRITERIA" : "(customer=" + customer + ")" 
@@ -224,13 +224,13 @@ const updateCustomerZoho = async (workspace = "", customer = 0, data = {}, dashb
     } else if (data.property_reports === 3) {
       data.property_reports = "DEFAULT_IAQ";
     }
-    if (data.report_output === 0) {
+    if (data.report_output === 1) {
       data.report_output = "Do Not Produce Reports";
-    } else if (data.report_output === 1) {
-      data.report_output = "Produce and Email All Property Reports";
     } else if (data.report_output === 2) {
-      data.report_output = "Produce and Email Only Property Reports with Issues";
+      data.report_output = "Produce and Email All Property Reports";
     } else if (data.report_output === 3) {
+      data.report_output = "Produce and Email Only Property Reports with Issues";
+    } else if (data.report_output === 4) {
       data.report_output = "Produce Reports Only";
     }
     post_data = qs.stringify({
@@ -292,12 +292,11 @@ const updateCustomerZoho = async (workspace = "", customer = 0, data = {}, dashb
 const updateDeviceZoho = async (workspace = "", device = 0, data = {}, dashboard = "") => {
   console.log("Updating Zoho Device data: " + JSON.stringify(data));
   let post_data = qs.stringify({
-    "ZOHO_ACTION": "UPDATE",
+    "ZOHO_ACTION": "DELETE",
     "ZOHO_OUTPUT_FORMAT": "JSON",
     "ZOHO_ERROR_FORMAT": "JSON",
     "ZOHO_API_VERSION": "1.0",
     "authtoken": api_auth,
-    "action": "None", // Default to 'None' after changes are made
     "ZOHO_CRITERIA" : "(device=" + device + ")" 
   });
   console.log(post_data);
