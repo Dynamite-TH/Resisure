@@ -301,7 +301,7 @@ const processCustomers = () => {
                 case "action":
                   cCustAction = c;
                   break;
-                case "customer id":
+                case "customer_id":
                   cCustID = c;
                   break;
                 case "customer":
@@ -319,7 +319,7 @@ const processCustomers = () => {
 
             for (let r = 0; r < custData.rows.length; r++) {
 
-              cID = (cCustID != null) ? parseInt(custData.rows[r][cCustID]) : 0;
+              cID = parseInt(custData.rows[r][cCustID]);
               cRef = custData.rows[r][cCustRef];
               cName = custData.rows[r][cCustName];
               cCName = custData.rows[r][cContName];
@@ -830,13 +830,12 @@ const processDevices = () => {
               //1 = new, 2 = amend, 3 = deactivate
               try {
                 if (dPropertyID) {
-                  if (dAction === 1) {
+                  if (dActionType === 1) {
                     //we do not have a property ID so we can create a new property
                     console.log("Editing Device: " + dDeviceID);
                     //post the message to the queue
                     msgJSON.action = "Edit";
                     messages.push(msgJSON);
-
                   } 
                 } else {  
                   console.log("No Device Admin Requests to Process");
