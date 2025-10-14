@@ -297,7 +297,7 @@ const updateDeviceZoho = async (workspace = "", device = 0, data = {}, dashboard
     "ZOHO_ERROR_FORMAT": "JSON",
     "ZOHO_API_VERSION": "1.0",
     "authtoken": api_auth,
-    "ZOHO_CRITERIA" : "(device=" + device + ")" 
+    "ZOHO_CRITERIA" : "(device_id=" + device + ")" 
   });
   console.log(post_data);
   let post_options = {
@@ -355,6 +355,7 @@ const updatePropertyZoho = async (workspace = "", property = 0, data = {}, dashb
     "Status" : data.status, //set status
     "Property Action": "None", // Default to 'None' after changes are made
     "Date Updated": formattedDateUpdated,
+    "Device Reference": data.device_ref,
     "Error message": error,
     "ZOHO_CRITERIA" : "(property=" + property + ")" 
   });
@@ -379,6 +380,7 @@ const updatePropertyZoho = async (workspace = "", property = 0, data = {}, dashb
     "Property Action": "None", // Default to 'None' after changes are made
     "Date Added" : formattedDateAdded,
     "Error message": error,
+    "Device Reference": data.device_ref,
     "ZOHO_CRITERIA" : "(property=" + property + ")" 
   });
   } 
@@ -529,37 +531,38 @@ const getStatus = async (reconnectDelay = 500) => {{
           const messageJSON = JSON.parse(message);
           console.log("MSG:");
           console.log(messageJSON);
-          for (let i = 0; i < messageJSON.length; i++) {
-            if (messageJSON[i].dashboard === 'customers') {
-              const dashboard = "Customer Admin";
-              console.log("Processing Customer Dashboard Message: " + JSON.stringify(messageJSON));
-              const status = await updateCustomerZoho(workspace, messageJSON[i].customer, messageJSON[i], dashboard);
-              console.log("Customer Dashboard Updated: " + JSON.stringify(status));
-
-            }
-            else if (messageJSON[i].dashboard === 'properties') {
+        if (Array.isArray(messageJSON.customers)) {
+          for (const cust of messageJSON.customers) {
+            const dashboard = "Customer Admin";
+            console.log("Processing Customer Dashboard Message: " + JSON.stringify(cust));
+            const status = await updateCustomerZoho(workspace, cust.customer, cust, dashboard);
+            console.log("Customer Dashboard Updated: " + JSON.stringify(status));
+          }
+        }
+        // Process properties
+        if (Array.isArray(messageJSON.properties)) {
+          for (const prop of messageJSON.properties) {
             const dashboard = "Property Admin";
-            console.log("Processing Property Dashboard Message: " + JSON.stringify(messageJSON));
-            const status = await updatePropertyZoho(workspace, messageJSON[i].property, messageJSON[i], dashboard);
+            console.log("Processing Property Dashboard Message: " + JSON.stringify(prop));
+            const status = await updatePropertyZoho(workspace, prop.property, prop, dashboard);
             console.log("Property Dashboard Updated: " + JSON.stringify(status));
-            } 
-            else if (messageJSON[i].dashboard === 'areas') {
-              const dashboard = "Area Admin";
-              console.log("Processing Area Dashboard Message: " + JSON.stringify(messageJSON));
-              //currently no area update function
-              const status = await updateAreaZoho(workspace, messageJSON[i].area, messageJSON[i], dashboard);
-              console.log("Area Dashboard Updated: " + JSON.stringify(status));
-            } else if (messageJSON[i].dashboard === 'devices') {
-              const dashboard = "Device Admin";
-              console.log("Processing Device Dashboard Message: " + JSON.stringify(messageJSON));
-              const status = await updateDeviceZoho(workspace, messageJSON[i].device, messageJSON[i], dashboard);
-              console.log("Device Dashboard Updated: " + JSON.stringify(status));
+            // if the property is adding a device it needs to be removed from devices pool
+            if ((prop.action === "new" || prop.action === "amend" || prop.action === "reactivate") && prop.device_id) {
+              const device_status = await updateDeviceZoho(workspace, prop.device_id, prop, "device_admin_data");
+              console.log("Device Dashboard Updated: " + JSON.stringify(device_status));
             }
-            // else if (messageJSON[i].dashboard === 'errors') {
-            //   console.log("Processing Error Dashboard Message: " + JSON.stringify(messageJSON));
-            //   const statusErr = await addError(workspace, messageJSON[i]);
-            //   console.log("Error Dashboard Updated: " + JSON.stringify(statusErr));
-            // }
+          }
+        }
+        // Process areas
+        if (Array.isArray(messageJSON.areas)) {
+          for (const area of messageJSON.areas) {
+            const dashboard = "Area Admin";
+            console.log("Processing Area Dashboard Message: " + JSON.stringify(area));
+            const status = await updateAreaZoho(workspace, area.area, area, dashboard);
+            console.log("Area Dashboard Updated: " + JSON.stringify(status));
+          }
+
+        
             // messageChannel.ack(amqpEncodedMessage);
         }
           //clear the message from the queue
