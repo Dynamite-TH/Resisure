@@ -291,11 +291,20 @@ const updateCustomerZoho = async (workspace = "", customer = 0, data = {}, dashb
 
 const updateDeviceZoho = async (workspace = "", device = 0, data = {}, dashboard = "") => {
   console.log("Updating Zoho Device data: " + JSON.stringify(data));
+  if (data.action == "deactivate") {
+    data.status = 2;
+    data.property_id = 1;
+  }
+  else {
+    data.status = 1;
+  }
   let post_data = qs.stringify({
-    "ZOHO_ACTION": "DELETE",
+    "ZOHO_ACTION": "UPDATE",
     "ZOHO_OUTPUT_FORMAT": "JSON",
     "ZOHO_ERROR_FORMAT": "JSON",
     "ZOHO_API_VERSION": "1.0",
+    "status": data.status,
+    "property_id": data.property_id, 
     "authtoken": api_auth,
     "ZOHO_CRITERIA" : "(device_id=" + device + ")" 
   });
@@ -345,6 +354,9 @@ const updatePropertyZoho = async (workspace = "", property = 0, data = {}, dashb
     if (data.error) {
       error = data.error.replace(/"/g, '');
     }
+    if (data.device_ref) {
+      data.device_ref = data.device_ref + " - active";
+    }
     post_data = qs.stringify({
     "ZOHO_ACTION": "UPDATE",
     "ZOHO_OUTPUT_FORMAT": "JSON",
@@ -352,7 +364,7 @@ const updatePropertyZoho = async (workspace = "", property = 0, data = {}, dashb
     "ZOHO_API_VERSION": "1.0",
     "authtoken": api_auth,
     "Property ID" : data.property_id, //set customer id
-    "Status" : data.status, //set status
+    "prop_status" : data.status, //set status
     "Property Action": "None", // Default to 'None' after changes are made
     "Date Updated": formattedDateUpdated,
     "Device Reference": data.device_ref,
@@ -369,6 +381,9 @@ const updatePropertyZoho = async (workspace = "", property = 0, data = {}, dashb
     if (data.error) {
       error = data.error.replace(/"/g, '');
     }
+    if (data.device_ref) {
+      data.device_ref = data.device_ref + "- active";
+    }
     post_data = qs.stringify({
     "ZOHO_ACTION": "UPDATE",
     "ZOHO_OUTPUT_FORMAT": "JSON",
@@ -376,9 +391,10 @@ const updatePropertyZoho = async (workspace = "", property = 0, data = {}, dashb
     "ZOHO_API_VERSION": "1.0",
     "authtoken": api_auth,
     "Property ID" : data.property_id, //set customer id
-    "Status" : data.status, //set status
+    "prop_status" : data.status, //set status
     "Property Action": "None", // Default to 'None' after changes are made
     "Date Added" : formattedDateAdded,
+    "Device Reference": data.device_ref,
     "Error message": error,
     "Device Reference": data.device_ref,
     "ZOHO_CRITERIA" : "(property=" + property + ")" 
@@ -547,8 +563,8 @@ const getStatus = async (reconnectDelay = 500) => {{
             const status = await updatePropertyZoho(workspace, prop.property, prop, dashboard);
             console.log("Property Dashboard Updated: " + JSON.stringify(status));
             // if the property is adding a device it needs to be removed from devices pool
-            if ((prop.action === "new" || prop.action === "amend" || prop.action === "reactivate") && prop.device_id) {
-              const device_status = await updateDeviceZoho(workspace, prop.device_id, prop, "device_admin_data");
+            if (prop.device_id && !prop.error) {
+              const device_status = await updateDeviceZoho(workspace, prop.device_id, prop, "devices");
               console.log("Device Dashboard Updated: " + JSON.stringify(device_status));
             }
           }
