@@ -304,10 +304,10 @@ const processProperty = (properties, type, client, status, errStatus) => {
               const InfoRes = await client.query('INSERT INTO property_info (flat_number, street_number, street, town, property_id, postcode, status, county, city, date_added) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING property_info_id', [property.flat_number, property.street_number, property.street, property.town, res.rows[0].property_id, property.property_code, property.status, property.county, property.city, dateAdded]);
               // console.log("Property Info Inserted: " + InfoRes.rows[0].property_info_id)
               if (property.device_id) {
-                if (property.device_property_id == 1 && property.device_status === 1) {
+                if (property.device_property_id == 1 && property.device_status === 2) {
                   const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
                 } else {
-                  throw new Error("Device must be unassigned from previous property to link to a new property");
+                  throw new Error("Device must be unassigned from previous property to link to a new property/ Must be an active device");
                 }
               }
               //set the status message
@@ -327,11 +327,14 @@ const processProperty = (properties, type, client, status, errStatus) => {
               const res = await client.query('UPDATE properties set customer_id = $2, property_code = $3, area_id = $4, date_updated = $5, status = $6, mould_sensitivity = $7, mould_index = $8, mould_decline_coefficient = $9 WHERE property_id = $1 RETURNING property_id', [property.property_id, property.customer_id, property.property_code, property.area_id, dateUpdated, property.status, property.mould_sensitivity, property.mould_index, property.mould_decline])
               console.log("Property Updated: " + res.rows[0].property_id)
               const InfoRes = await client.query('UPDATE property_info set flat_number = $2, street_number = $3, street = $4, town = $5, postcode = $6, county = $7, city = $8 WHERE property_id = $1 RETURNING property_info_id', [property.property_id, property.flat_number, property.street_number, property.street, property.town, property.property_code, property.county, property.city]);
-              if (property.device_id) {
-                if (property.device_property_id == 1 && property.device_status === 1) {
+
+              const dev = await client.query('SELECT property_id FROM devices WHERE device_id = $1', [property.device_id]);
+              const devicePropID = dev.rows[0].property_id;
+              if (property.device_id && devicePropID != property.property_id) {
+                if ((property.device_property_id == 1 && property.device_status == 2)) {
                   const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
                 } else {
-                  throw new Error("Device must be unassigned from previous property to link to a new property");
+                  throw new Error("Device must be unassigned from previous property to link to a new property/ Must be an active device");
                 }
               }
               //set the status message
@@ -354,7 +357,8 @@ const processProperty = (properties, type, client, status, errStatus) => {
               statusMsg.status = 0; //set status to 0 for deactivated properties
               let dateUpdated = new Date()
               statusMsg.date_updated = dateUpdated;
-              statusMsg.device_ref = ""
+              statusMsg.device_ref = property.device_ref;
+              statusMsg.property_id = 1;
               status.push(statusMsg);
               console.log("Status Message Posted: " + JSON.stringify(statusMsg));
             } else if (property.action === "reactivate") {
@@ -363,7 +367,7 @@ const processProperty = (properties, type, client, status, errStatus) => {
 
               const res = await client.query('UPDATE properties set status = 1 WHERE property_id = $1 RETURNING customer_id', [property.property_id]);
               if (property.device_id) {
-                if (property.device_property_id == 1 && property.device_status === 1) {
+                if (property.device_property_id == 1 && property.device_status === 2) {
                   const DevRes = await client.query('UPDATE devices set property_id = $1, status = $3 WHERE device_id = $2', [property.property_id, property.device_id, 1])
                 } else {
                   throw new Error("Device must be unassigned from previous property to link to a new property/ Must be an active device");
