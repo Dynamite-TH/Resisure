@@ -543,7 +543,7 @@ const processProperties = (adminMsg) => {
                 case "city":
                   pCity = c;
                   break;
-                case "device reference":
+                case "device_ref":
                   dRef = c;
                   break;
                 case "device_id":
